@@ -7,6 +7,7 @@ mod labels;
 mod camera_capture;
 mod hand_tracking;
 mod video_overlay;
+mod gesture_classifier;
 mod hand_renderer;
 
 use clap::{Parser, Subcommand};
