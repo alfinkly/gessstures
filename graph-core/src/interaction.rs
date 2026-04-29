@@ -36,9 +36,24 @@ impl InteractionState {
         self.mode = GraphInteractionMode::VertexContent;
     }
 
+    /// Go back one level in the mode hierarchy:
+    /// VertexContent → VertexPinned (preserves pinned_node)
+    /// otherwise → GraphView (clears pinned_node)
     pub fn go_back(&mut self) {
-        self.mode = GraphInteractionMode::GraphView;
-        self.pinned_node = None;
+        if self.mode == GraphInteractionMode::VertexContent {
+            self.mode = GraphInteractionMode::VertexPinned;
+            // Stay on same pinned node, just go back to pin view
+        } else {
+            self.mode = GraphInteractionMode::GraphView;
+            self.pinned_node = None;
+        }
+    }
+
+    /// Navigate to a linked vertex from pinned mode.
+    /// Keeps mode in VertexPinned, just changes the pinned node.
+    pub fn navigate_to_linked(&mut self, new_node: NodeIndex) {
+        self.pinned_node = Some(new_node);
+        // stay in VertexPinned mode
     }
 
     pub fn set_hovered(&mut self, node: Option<NodeIndex>) {
