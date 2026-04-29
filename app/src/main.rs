@@ -10,6 +10,7 @@ mod video_overlay;
 mod gesture_classifier;
 mod hand_renderer;
 mod gesture_detector;
+mod gesture_actions;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -25,6 +26,7 @@ use hand_tracking::HandTrackingPlugin;
 use video_overlay::VideoOverlayPlugin;
 use hand_renderer::HandRendererPlugin;
 use gesture_detector::GestureDetectorPlugin;
+use gesture_actions::GestureActionPlugin;
 
 #[derive(Parser)]
 #[command(name = "gessstures", about = "3D graph visualization with hand gestures")]
@@ -83,6 +85,7 @@ fn main() {
                     VideoOverlayPlugin,
                     HandRendererPlugin,
                     GestureDetectorPlugin,
+                    GestureActionPlugin,
                 ))
                 .add_systems(
                     Startup,
