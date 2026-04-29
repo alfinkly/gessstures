@@ -14,6 +14,7 @@ mod gesture_actions;
 mod cursor_mapper;
 mod nearest_vertex;
 mod vertex_highlight;
+mod graph_navigation;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -31,6 +32,7 @@ use hand_renderer::HandRendererPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
+use graph_navigation::GraphNavigationPlugin;
 
 #[derive(Parser)]
 #[command(name = "gessstures", about = "3D graph visualization with hand gestures")]
@@ -91,6 +93,7 @@ fn main() {
                     HandRendererPlugin,
                     GestureDetectorPlugin,
                     GestureActionPlugin,
+                    GraphNavigationPlugin,
                 ))
                 .add_systems(Update, update_hovered_node)
                 .add_systems(
