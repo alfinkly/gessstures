@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::gesture_detector::{gesture_display_name, GestureState};
 use crate::hand_tracking::HandLandmarkResource;
 
 /// Skeleton edges connecting 21 hand landmarks.
@@ -112,15 +113,17 @@ fn draw_skeleton(
 
 fn update_status_text(
     hand_landmarks: Res<HandLandmarkResource>,
+    gesture_state: Res<GestureState>,
     mut query: Query<&mut Text, With<StatusLabel>>,
 ) {
     let Ok(data) = hand_landmarks.inner.lock() else { return };
     let Ok(mut text) = query.get_single_mut() else { return };
 
+    let gesture_name = gesture_display_name(gesture_state.current_gesture);
     let status = if data.landmarks.is_some() {
         "detected"
     } else {
         "\u{2014}"
     };
-    text.0 = format!("Hand: {} | Gesture: \u{2014}", status);
+    text.0 = format!("Hand: {} | Gesture: {}", status, gesture_name);
 }
