@@ -13,6 +13,7 @@ mod gesture_detector;
 mod gesture_actions;
 mod cursor_mapper;
 mod nearest_vertex;
+mod vertex_highlight;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -27,6 +28,7 @@ use camera_capture::CameraCapturePlugin;
 use hand_tracking::HandTrackingPlugin;
 use video_overlay::VideoOverlayPlugin;
 use hand_renderer::HandRendererPlugin;
+use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
 
@@ -85,6 +87,7 @@ fn main() {
                     CameraCapturePlugin,
                     HandTrackingPlugin,
                     VideoOverlayPlugin,
+                    VertexHighlightPlugin,
                     HandRendererPlugin,
                     GestureDetectorPlugin,
                     GestureActionPlugin,
