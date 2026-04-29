@@ -1,0 +1,9 @@
+[package]
+name = "graph_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+petgraph = "0.7"
+bevy = "0.15"
+serde = { version = "1", features = ["derive"] }
