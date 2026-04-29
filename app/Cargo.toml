@@ -1,0 +1,19 @@
+[package]
+name = "app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+graph_core = { path = "../graph-core" }
+ai_pipeline = { path = "../ai-pipeline" }
+data_sources = { path = "../data-sources" }
+input_sources = { path = "../input-sources" }
+bevy = "0.15"
+clap = { version = "4", features = ["derive"] }
+walkdir = "2"
+petgraph = "0.7"
+rand = "0.8"
+pulldown-cmark = "0.12"
+nokhwa = { version = "0.10", features = ["input-native"] }
+ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
+image = "0.25"
