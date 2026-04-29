@@ -11,10 +11,12 @@ mod gesture_classifier;
 mod hand_renderer;
 mod gesture_detector;
 mod gesture_actions;
+mod cursor_mapper;
+mod nearest_vertex;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
-use graph_core::{CameraCommand, NewContent, GraphUpdate, GraphQuery, GraphResource, GraphChanged};
+use graph_core::{CameraCommand, NewContent, GraphUpdate, GraphQuery, GraphResource, GraphChanged, InteractionState};
 use graph_builder::GraphBuilderPlugin;
 use renderer::GraphRendererPlugin;
 use physics::ForceLayoutPlugin;
@@ -87,6 +89,7 @@ fn main() {
                     GestureDetectorPlugin,
                     GestureActionPlugin,
                 ))
+                .add_systems(Update, update_hovered_node)
                 .add_systems(
                     Startup,
                     move |mut events: EventWriter<NewContent>| {
@@ -105,6 +108,32 @@ fn main() {
         Commands::Voice => {
             println!("Voice mode (not yet implemented)");
         }
+    }
+}
+
+fn update_hovered_node(
+    gesture_state: Res<crate::gesture_detector::GestureState>,
+    mut interaction: ResMut<InteractionState>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    node_q: Query<(&Transform, &crate::renderer::GraphNode)>,
+) {
+    if !gesture_state.hand_detected {
+        interaction.set_hovered(None);
+        return;
+    }
+
+    let Ok((cam, cam_transform)) = camera_q.get_single() else {
+        return;
+    };
+
+    if let Some(world_pos) = cursor_mapper::map_hand_to_3d(
+        gesture_state.cursor_x,
+        gesture_state.cursor_y,
+        cam_transform,
+        cam,
+    ) {
+        let nearest = nearest_vertex::find_nearest_vertex(world_pos, &node_q, 5.0);
+        interaction.set_hovered(nearest.map(|(idx, _)| idx));
     }
 }
 
