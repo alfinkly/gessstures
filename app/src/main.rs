@@ -14,6 +14,7 @@ mod gesture_actions;
 mod cursor_mapper;
 mod nearest_vertex;
 mod vertex_highlight;
+mod content_viewer;
 mod graph_navigation;
 
 use clap::{Parser, Subcommand};
@@ -32,6 +33,7 @@ use hand_renderer::HandRendererPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
+use content_viewer::ContentViewerPlugin;
 use graph_navigation::GraphNavigationPlugin;
 
 #[derive(Parser)]
@@ -94,6 +96,9 @@ fn main() {
                     GestureDetectorPlugin,
                     GestureActionPlugin,
                     GraphNavigationPlugin,
+                    ContentViewerPlugin {
+                        notes_dir: notes.clone(),
+                    },
                 ))
                 .add_systems(Update, update_hovered_node)
                 .add_systems(
