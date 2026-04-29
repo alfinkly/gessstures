@@ -5,6 +5,7 @@ mod camera;
 mod input;
 mod labels;
 mod camera_capture;
+mod hand_tracking;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -16,6 +17,7 @@ use camera::OrbitCameraPlugin;
 use input::TextInputPlugin;
 use labels::NodeLabelsPlugin;
 use camera_capture::CameraCapturePlugin;
+use hand_tracking::HandTrackingPlugin;
 
 #[derive(Parser)]
 #[command(name = "gessstures", about = "3D graph visualization with hand gestures")]
@@ -70,6 +72,7 @@ fn main() {
                     TextInputPlugin,
                     NodeLabelsPlugin,
                     CameraCapturePlugin,
+                    HandTrackingPlugin,
                 ))
                 .add_systems(
                     Startup,

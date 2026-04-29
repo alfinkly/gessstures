@@ -17,3 +17,4 @@ pulldown-cmark = "0.12"
 nokhwa = { version = "0.10", features = ["input-native"] }
 ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
 image = "0.25"
+ndarray = "0.17"

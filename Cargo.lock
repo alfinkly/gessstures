@@ -256,6 +256,7 @@ dependencies = [
  "graph_core",
  "image",
  "input_sources",
+ "ndarray",
  "nokhwa",
  "ort",
  "petgraph 0.7.1",
