@@ -94,24 +94,21 @@ fn draw_skeleton(
         return;
     }
 
-    let to_world: Box<dyn Fn(f32, f32) -> Vec2> = if let Some(rect) = pip_rect {
-        if rect.enabled && rect.width > 0.0 && rect.height > 0.0 {
-            let (left, top, pw, ph) = (rect.left, rect.top, rect.width, rect.height);
-            Box::new(move |x: f32, y: f32| -> Vec2 {
-                Vec2::new(
-                    left + x * pw - w * 0.5,
-                    h * 0.5 - top - (1.0 - y) * ph,
-                )
-            })
+    let (use_pip, pip_left, pip_top, pip_w, pip_h) = pip_rect
+        .as_ref()
+        .filter(|r| r.enabled && r.width > 0.0 && r.height > 0.0)
+        .map(|r| (true, r.left, r.top, r.width, r.height))
+        .unwrap_or((false, 0.0, 0.0, w, h));
+
+    let to_world = |x: f32, y: f32| -> Vec2 {
+        if use_pip {
+            Vec2::new(
+                pip_left + x * pip_w - w * 0.5,
+                h * 0.5 - pip_top - (1.0 - y) * pip_h,
+            )
         } else {
-            Box::new(move |x: f32, y: f32| -> Vec2 {
-                Vec2::new(x * w - w * 0.5, h * 0.5 - y * h)
-            })
-        }
-    } else {
-        Box::new(move |x: f32, y: f32| -> Vec2 {
             Vec2::new(x * w - w * 0.5, h * 0.5 - y * h)
-        })
+        }
     };
 
     for &(a, b) in &SKELETON_CONNECTIONS {
