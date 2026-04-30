@@ -56,12 +56,10 @@ fn setup_preview_video(
             custom_size: Some(Vec2::new(width as f32, height as f32)),
             ..default()
         },
-        Transform::from_scale(Vec3::splat(
-            if ww > 0.0 && wh > 0.0 {
-                (ww / width as f32).min(wh / height as f32)
-            } else {
-                1.0
-            },
+        Transform::from_scale(Vec3::new(
+            if ww > 0.0 && wh > 0.0 { ww / width as f32 } else { 1.0 },
+            if ww > 0.0 && wh > 0.0 { wh / height as f32 } else { 1.0 },
+            1.0,
         )),
         PreviewVideoRoot,
     ));
@@ -132,7 +130,11 @@ fn update_preview_texture(
             let ww = window.width();
             let wh = window.height();
             if ww > 0.0 && wh > 0.0 {
-                transform.scale = Vec3::splat((ww / frame.width as f32).min(wh / frame.height as f32));
+                transform.scale = Vec3::new(
+                    ww / frame.width as f32,
+                    wh / frame.height as f32,
+                    1.0,
+                );
             }
         }
     }
