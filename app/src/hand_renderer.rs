@@ -113,13 +113,15 @@ fn draw_skeleton(
 
 fn update_status_text(
     hand_landmarks: Res<HandLandmarkResource>,
-    gesture_state: Res<GestureState>,
+    gesture_state: Option<Res<GestureState>>,
     mut query: Query<&mut Text, With<StatusLabel>>,
 ) {
     let Ok(data) = hand_landmarks.inner.lock() else { return };
     let Ok(mut text) = query.get_single_mut() else { return };
 
-    let gesture_name = gesture_display_name(gesture_state.current_gesture);
+    let gesture_name = gesture_state
+        .map(|gs| gesture_display_name(gs.current_gesture))
+        .unwrap_or("\u{2014}");
     let status = if data.landmarks.is_some() {
         "detected"
     } else {
