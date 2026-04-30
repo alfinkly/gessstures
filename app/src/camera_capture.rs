@@ -1,8 +1,3 @@
-/// Camera capture module using nokhwa.
-///
-/// Runs the camera in a background thread and exposes the latest frame
-/// via the `CameraResource` Bevy resource. Handles disconnect/reconnect
-/// gracefully by logging errors and retrying.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -16,11 +11,6 @@ const CAPTURE_WIDTH: u32 = 640;
 const CAPTURE_HEIGHT: u32 = 480;
 const CAPTURE_FPS: u32 = 30;
 
-/// A single frame captured from the camera.
-///
-/// `data` contains the pixel data. If the camera delivers MJPEG, the
-/// capture thread decodes it to RGBA so downstream consumers always
-/// get raw RGBA bytes (4 bytes per pixel, row-major).
 pub struct CameraFrame {
     pub data: Vec<u8>,
     pub width: u32,
@@ -29,16 +19,12 @@ pub struct CameraFrame {
     pub timestamp: std::time::Instant,
 }
 
-/// Bevy resource holding the latest captured frame.
-///
-/// Clone the `Arc` handles to share with a background capture thread.
 #[derive(Resource)]
 pub struct CameraResource {
     pub frame: Arc<Mutex<Option<CameraFrame>>>,
     pub is_active: Arc<AtomicBool>,
 }
 
-/// Plugin that initialises camera capture in a background thread on startup.
 pub struct CameraCapturePlugin;
 
 impl Plugin for CameraCapturePlugin {
@@ -60,7 +46,6 @@ fn start_camera_capture(mut commands: Commands) {
     std::thread::spawn(move || capture_loop(frame, is_active));
 }
 
-/// Main capture loop. Runs forever. Reconnects on camera errors.
 fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<AtomicBool>) {
     loop {
         match open_camera() {
@@ -72,26 +57,17 @@ fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<At
                     match camera.frame() {
                         Ok(frame) => {
                             let raw = frame.buffer().to_vec();
-                            let resolution = frame.resolution();
-                            let source_fmt = frame.source_frame_format();
+                            let w = frame.resolution().width();
+                            let h = frame.resolution().height();
+                            let src_fmt = frame.source_frame_format();
 
-                            let data = if source_fmt == FrameFormat::MJPEG {
-                                match decode_jpeg(&raw) {
-                                    Some(rgba) => rgba,
-                                    None => {
-                                        warn!("MJPEG decode failed, storing raw");
-                                        raw
-                                    }
-                                }
-                            } else {
-                                raw
-                            };
+                            let data = frame_to_rgba(&raw, w, h, src_fmt);
 
                             let new_frame = CameraFrame {
                                 data,
-                                width: resolution.width(),
-                                height: resolution.height(),
-                                format: source_fmt,
+                                width: w,
+                                height: h,
+                                format: src_fmt,
                                 timestamp: std::time::Instant::now(),
                             };
 
@@ -113,34 +89,131 @@ fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<At
             }
         }
 
-        info!("Camera disconnected or unavailable – retrying in 2 s ...");
+        info!("Camera disconnected or unavailable \u{2013} retrying in 2 s ...");
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
 
 fn open_camera() -> Result<Camera, nokhwa::NokhwaError> {
-    let index = CameraIndex::Index(0);
-    let cam_format =
-        CameraFormat::new_from(CAPTURE_WIDTH, CAPTURE_HEIGHT, FrameFormat::MJPEG, CAPTURE_FPS);
-    let requested = RequestedFormat::with_formats(
-        RequestedFormatType::Closest(cam_format),
-        &[FrameFormat::MJPEG],
-    );
-    let mut camera = Camera::new(index, requested)?;
-    camera.open_stream()?;
-    Ok(camera)
+    let attempts: &[(u32, u32, u32, FrameFormat)] = &[
+        (640, 480, 30, FrameFormat::MJPEG),
+        (640, 480, 15, FrameFormat::MJPEG),
+        (1280, 720, 30, FrameFormat::MJPEG),
+        (640, 480, 30, FrameFormat::YUYV),
+        (640, 480, 30, FrameFormat::NV12),
+        (640, 480, 30, FrameFormat::RAWRGB),
+    ];
+
+    for &(w, h, fps, fmt) in attempts {
+        let index = CameraIndex::Index(0);
+        let cf = CameraFormat::new_from(w, h, fmt, fps);
+        let formats = [fmt];
+        let req = RequestedFormat::with_formats(RequestedFormatType::Closest(cf), &formats);
+        if let Ok(mut camera) = Camera::new(index, req) {
+            if camera.open_stream().is_ok() {
+                let actual = camera.camera_format();
+                info!("Camera opened: {}x{} {:?} {}fps",
+                    actual.resolution().width(),
+                    actual.resolution().height(),
+                    actual.format(),
+                    actual.frame_rate());
+                return Ok(camera);
+            }
+        }
+    }
+
+    Err(nokhwa::NokhwaError::OpenDeviceError(
+        "camera_capture".to_string(),
+        "no supported camera format found".to_string(),
+    ))
+}
+
+fn frame_to_rgba(data: &[u8], width: u32, height: u32, fmt: FrameFormat) -> Vec<u8> {
+    match fmt {
+        FrameFormat::MJPEG => decode_jpeg(data).unwrap_or_else(|| data.to_vec()),
+        FrameFormat::YUYV => yuyv_to_rgba(data, width, height),
+        FrameFormat::NV12 => nv12_to_rgba(data, width, height),
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            raw_to_rgba(data, width, height, fmt == FrameFormat::RAWBGR)
+        }
+        FrameFormat::GRAY => {
+            data.iter().take((width * height) as usize)
+                .flat_map(|&g| vec![g, g, g, 255])
+                .collect()
+        }
+    }
 }
 
 fn decode_jpeg(jpeg_data: &[u8]) -> Option<Vec<u8>> {
-    use image::load_from_memory;
-    match load_from_memory(jpeg_data) {
-        Ok(img) => {
-            let rgba = img.to_rgba8();
-            Some(rgba.into_raw())
-        }
-        Err(e) => {
-            warn!("JPEG decode error: {}", e);
-            None
+    image::load_from_memory(jpeg_data)
+        .ok()
+        .map(|img| img.to_rgba8().into_raw())
+}
+
+fn yuyv_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            let i = ((y * width + x) * 2) as usize;
+            let y_val = data.get(i).copied().unwrap_or(128) as f32;
+            let u = data.get(i + 1).copied().unwrap_or(128) as f32;
+            let v = if x % 2 == 0 {
+                data.get(i + 3).copied().unwrap_or(128) as f32
+            } else {
+                data.get(i - 1).copied().unwrap_or(128) as f32
+            };
+            let cy = y_val - 16.0;
+            let cu = u - 128.0;
+            let cv = v - 128.0;
+            rgba.extend_from_slice(&[
+                (1.164 * cy + 1.596 * cv).clamp(0.0, 255.0) as u8,
+                (1.164 * cy - 0.392 * cu - 0.813 * cv).clamp(0.0, 255.0) as u8,
+                (1.164 * cy + 2.017 * cu).clamp(0.0, 255.0) as u8,
+                255,
+            ]);
         }
     }
+    rgba
+}
+
+fn nv12_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    let frame_size = (width * height) as usize;
+    for y in 0..height {
+        for x in 0..width {
+            let yi = (y * width + x) as usize;
+            let y_val = data.get(yi).copied().unwrap_or(128) as f32;
+            let uv_offset = frame_size + ((y / 2) * (width / 2) + (x / 2)) as usize * 2;
+            let u = data.get(uv_offset).copied().unwrap_or(128) as f32;
+            let v = data.get(uv_offset + 1).copied().unwrap_or(128) as f32;
+            let cy = y_val - 16.0;
+            let cu = u - 128.0;
+            let cv = v - 128.0;
+            rgba.extend_from_slice(&[
+                (1.164 * cy + 1.596 * cv).clamp(0.0, 255.0) as u8,
+                (1.164 * cy - 0.392 * cu - 0.813 * cv).clamp(0.0, 255.0) as u8,
+                (1.164 * cy + 2.017 * cu).clamp(0.0, 255.0) as u8,
+                255,
+            ]);
+        }
+    }
+    rgba
+}
+
+fn raw_to_rgba(data: &[u8], width: u32, height: u32, bgr: bool) -> Vec<u8> {
+    let pixels = (width * height) as usize;
+    let mut rgba = Vec::with_capacity(pixels * 4);
+    for i in 0..pixels {
+        let base = i * 3;
+        if base + 2 >= data.len() {
+            break;
+        }
+        let (r, g, b) = if bgr {
+            (data[base + 2], data[base + 1], data[base])
+        } else {
+            (data[base], data[base + 1], data[base + 2])
+        };
+        rgba.extend_from_slice(&[r, g, b, 255]);
+    }
+    rgba
 }
