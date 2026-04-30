@@ -47,6 +47,14 @@ pub enum GraphAction {
     ReleaseNode,
     /// Show a context menu (pinch on void, stub for now).
     ContextMenu,
+    /// Undo the last navigation action (swipe left).
+    Undo,
+    /// Enter filter/search mode (V-sign).
+    FilterMode,
+    /// Exit filter/search mode (transition away from V-sign).
+    ExitFilterMode,
+    /// Reset the camera view to default (open palm hold 2s).
+    ResetView,
 }
 
 /// Bevy event wrapping a single graph action.
@@ -65,6 +73,7 @@ pub(crate) struct GestureActionState {
     prev_gesture: Gesture,
     last_action_time: std::time::Instant,
     cooldown: std::time::Duration,
+    last_swipe_direction: Option<f32>,
 }
 
 impl Default for GestureActionState {
@@ -74,6 +83,7 @@ impl Default for GestureActionState {
             last_action_time: std::time::Instant::now()
                 - std::time::Duration::from_secs(10),
             cooldown: std::time::Duration::from_millis(500),
+            last_swipe_direction: None,
         }
     }
 }
@@ -113,10 +123,18 @@ pub(crate) fn process_gesture_actions(
 
     // --- Handle hold events (fired when gesture held for N frames) ---
     for hold_event in gesture_hold_events.read() {
-        if hold_event.gesture == Gesture::Point {
-            graph_action_events.send(GraphActionEvent {
-                action: GraphAction::ReadContent,
-            });
+        match hold_event.gesture {
+            Gesture::Point => {
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::ReadContent,
+                });
+            }
+            Gesture::OpenPalm => {
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::ResetView,
+                });
+            }
+            _ => {}
         }
     }
 
@@ -176,6 +194,19 @@ pub(crate) fn process_gesture_actions(
             }
         }
 
+        // --- Discrete action: swipe (fires on direction change, no gesture transition needed) ---
+        if let Some(dir) = event.swipe_direction {
+            if dir < 0.0 && state.last_swipe_direction != Some(dir) {
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::Undo,
+                });
+                state.last_action_time = std::time::Instant::now();
+            }
+            state.last_swipe_direction = Some(dir);
+        } else {
+            state.last_swipe_direction = None;
+        }
+
         // --- Discrete actions: fire only on gesture TRANSITION ---
         let now = std::time::Instant::now();
         if now.duration_since(state.last_action_time) < cooldown {
@@ -215,6 +246,12 @@ pub(crate) fn process_gesture_actions(
                     });
                     state.last_action_time = now;
                 }
+                Gesture::VSIGN => {
+                    graph_action_events.send(GraphActionEvent {
+                        action: GraphAction::FilterMode,
+                    });
+                    state.last_action_time = now;
+                }
                 _ => {}
             }
 
@@ -226,6 +263,13 @@ pub(crate) fn process_gesture_actions(
                         action: GraphAction::ReleaseNode,
                     });
                 }
+            }
+
+            // Handle leaving VSIGN (emit ExitFilterMode when transitioning away)
+            if state.prev_gesture == Gesture::VSIGN && event.gesture != Gesture::VSIGN {
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::ExitFilterMode,
+                });
             }
         }
 

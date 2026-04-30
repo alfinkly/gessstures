@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::f32::consts::TAU;
 use graph_core::{
     CameraCommand, CameraCommandKind, GraphInteractionMode, GraphResource, InteractionState,
     NodeData, NodeIndex,
@@ -6,7 +7,8 @@ use graph_core::{
 use hand_tracking_core::Gesture;
 
 use crate::gesture_actions::{GraphAction, GraphActionEvent};
-use crate::gesture_detector::GestureState;
+use crate::gesture_detector::{GestureState, GestureHold};
+use crate::cursor_mapper::map_hand_to_3d;
 use crate::renderer::GraphNode;
 
 // ---------------------------------------------------------------------------
@@ -35,6 +37,8 @@ impl Plugin for GraphNavigationPlugin {
                     handle_graph_actions
                         .after(crate::gesture_actions::process_gesture_actions),
                     update_mode_text,
+                    hold_progress_indicator
+                        .after(crate::gesture_actions::process_gesture_actions),
                 ),
             );
     }
@@ -58,6 +62,62 @@ fn mode_label(gesture: Gesture) -> &'static str {
         Gesture::VSIGN => "V-Sign",
         Gesture::Movement => "Navigate",
         Gesture::Unknown => "\u{2014}",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hold progress indicator (circular arc for OpenPalm hold-to-reset)
+// ---------------------------------------------------------------------------
+
+/// Draws a circular progress indicator when OpenPalm is being held,
+/// positioned near the hand cursor in 3D space.
+fn hold_progress_indicator(
+    gesture_hold: Res<GestureHold>,
+    gesture_state: Res<GestureState>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut gizmos: Gizmos,
+) {
+    if gesture_hold.gesture != Gesture::OpenPalm || gesture_hold.frames_held == 0 {
+        return;
+    }
+
+    let progress = (gesture_hold.frames_held as f32 / gesture_hold.target_frames as f32).min(1.0);
+
+    let Ok((cam, cam_transform)) = camera_q.get_single() else {
+        return;
+    };
+
+    if let Some(world_pos) = map_hand_to_3d(
+        gesture_state.cursor_x,
+        gesture_state.cursor_y,
+        cam_transform,
+        cam,
+    ) {
+        // Offset arc slightly above the cursor position
+        let arc_pos = world_pos + Vec3::new(0.0, 0.3, 0.0);
+
+        // Face the camera
+        let to_camera = (cam_transform.translation() - arc_pos).normalize();
+        let rotation = Quat::from_rotation_arc(Vec3::Z, to_camera);
+
+        // Interpolate color: yellow → green as progress fills
+        let r = 1.0 - progress;
+        let g = 1.0;
+        let b = 0.0;
+        let color = Color::srgb(r, g, b);
+
+        // Draw a partial arc showing hold progress
+        // Build arc points in the local XY plane, then rotate to face camera
+        let arc_angle = TAU * progress;
+        let seg_count = 20.max((arc_angle / 0.05) as u32);
+        let mut arc_points = Vec::with_capacity(seg_count as usize + 1);
+        for i in 0..=seg_count {
+            let t = i as f32 / seg_count as f32;
+            let a = arc_angle * t;
+            let local = Vec3::new(a.cos() * 0.08, a.sin() * 0.08, 0.0);
+            arc_points.push(arc_pos + rotation * local);
+        }
+        gizmos.linestrip(arc_points, color);
     }
 }
 
@@ -309,6 +369,24 @@ pub(crate) fn handle_graph_actions(
             }
             GraphAction::ContextMenu => {
                 info!("Context menu stub: pinch on void (no hovered node)");
+            }
+            GraphAction::Undo => {
+                info!("Undo triggered via swipe left");
+                // Stub — future: pop from navigation history stack
+            }
+            GraphAction::FilterMode => {
+                info!("Filter mode entered via V-sign");
+                // Stub — future: show search/filter UI overlay
+            }
+            GraphAction::ExitFilterMode => {
+                info!("Filter mode exited");
+                // Stub — future: hide search/filter UI overlay
+            }
+            GraphAction::ResetView => {
+                info!("Reset view via open palm hold");
+                camera_cmd.send(CameraCommand {
+                    kind: CameraCommandKind::Reset,
+                });
             }
         }
     }
