@@ -22,6 +22,7 @@ impl Plugin for VideoOverlayPlugin {
 
 fn setup_video_background(
     mut commands: Commands,
+    camera_q: Query<Entity, With<Camera3d>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -39,7 +40,7 @@ fn setup_video_background(
     );
     let texture_handle = images.add(image);
 
-    let mesh = Mesh::from(Rectangle::from_size(Vec2::new(200.0, 200.0)));
+    let mesh = Mesh::from(Rectangle::from_size(Vec2::new(100.0, 100.0)));
     let mesh_handle = meshes.add(mesh);
 
     let material = StandardMaterial {
@@ -50,13 +51,15 @@ fn setup_video_background(
     };
     let material_handle = materials.add(material);
 
-    commands.spawn((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(material_handle),
-        Transform::from_xyz(0.0, 0.0, -20.0),
-        VideoBackground,
-        VideoTexture(texture_handle),
-    ));
+    if let Ok(cam_entity) = camera_q.get_single() {
+        commands.entity(cam_entity).with_child((
+            Mesh3d(mesh_handle),
+            MeshMaterial3d(material_handle),
+            Transform::from_xyz(0.0, 0.0, -100.0),
+            VideoBackground,
+            VideoTexture(texture_handle),
+        ));
+    }
 }
 
 fn update_video_texture(
