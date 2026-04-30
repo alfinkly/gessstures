@@ -17,6 +17,20 @@ pub enum GraphAction {
         cursor_x: f32,
         cursor_y: f32,
     },
+    /// Pan the camera (open palm with lateral movement).
+    Pan {
+        delta_x: f32,
+        delta_y: f32,
+    },
+    /// Orbit the camera (fist with movement).
+    Orbit {
+        delta_yaw: f32,
+        delta_pitch: f32,
+    },
+    /// Zoom the camera (open palm with z-depth change).
+    Zoom {
+        amount: f32,
+    },
     /// Enter vertex-pinning mode (pinch → hold).
     PinVertex,
     /// Read the content of the pinned vertex (fist).
@@ -81,16 +95,52 @@ fn process_gesture_actions(
 ) {
     let cooldown = state.cooldown;
 
+    // Zoom sensitivity factor for z-depth changes
+    const ZOOM_FACTOR: f32 = 10.0;
+
     for event in gesture_events.read() {
         // --- Continuous action (always fires, no cooldown) ---
-        graph_action_events.send(GraphActionEvent {
-            action: GraphAction::Navigate {
-                delta_x: event.delta_x,
-                delta_y: event.delta_y,
-                cursor_x: event.cursor_x,
-                cursor_y: event.cursor_y,
-            },
-        });
+        match event.gesture {
+            Gesture::OpenPalm => {
+                let has_movement = event.delta_x != 0.0 || event.delta_y != 0.0;
+                let has_zoom = event.delta_z != 0.0;
+
+                if has_movement {
+                    graph_action_events.send(GraphActionEvent {
+                        action: GraphAction::Pan {
+                            delta_x: event.delta_x,
+                            delta_y: event.delta_y,
+                        },
+                    });
+                }
+                if has_zoom {
+                    graph_action_events.send(GraphActionEvent {
+                        action: GraphAction::Zoom {
+                            amount: event.delta_z * ZOOM_FACTOR,
+                        },
+                    });
+                }
+            }
+            Gesture::Fist => {
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::Orbit {
+                        delta_yaw: event.delta_x * 3.0,
+                        delta_pitch: -event.delta_y * 3.0,
+                    },
+                });
+            }
+            _ => {
+                // Fallback: Navigate for backward compat
+                graph_action_events.send(GraphActionEvent {
+                    action: GraphAction::Navigate {
+                        delta_x: event.delta_x,
+                        delta_y: event.delta_y,
+                        cursor_x: event.cursor_x,
+                        cursor_y: event.cursor_y,
+                    },
+                });
+            }
+        }
 
         // --- Discrete actions: fire only on gesture TRANSITION ---
         let now = std::time::Instant::now();

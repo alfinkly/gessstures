@@ -3,8 +3,10 @@ use graph_core::{
     CameraCommand, CameraCommandKind, GraphInteractionMode, GraphResource, InteractionState,
     NodeData, NodeIndex,
 };
+use hand_tracking_core::Gesture;
 
 use crate::gesture_actions::{GraphAction, GraphActionEvent};
+use crate::gesture_detector::GestureState;
 use crate::renderer::GraphNode;
 
 // ---------------------------------------------------------------------------
@@ -15,8 +17,58 @@ pub struct GraphNavigationPlugin;
 
 impl Plugin for GraphNavigationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, handle_graph_actions);
+        app.add_systems(Startup, spawn_mode_text)
+            .add_systems(Update, (handle_graph_actions, update_mode_text));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mode indicator UI
+// ---------------------------------------------------------------------------
+
+/// Marker component for the navigation mode text overlay.
+#[derive(Component)]
+struct ModeText;
+
+/// Returns a human-readable label for the gesture-based navigation mode.
+fn mode_label(gesture: Gesture) -> &'static str {
+    match gesture {
+        Gesture::OpenPalm => "Pan",
+        Gesture::Fist => "Orbit",
+        Gesture::Pinch => "Pinch",
+        Gesture::Point => "Point",
+        Gesture::VSIGN => "V-Sign",
+        Gesture::Movement => "Navigate",
+        Gesture::Unknown => "\u{2014}",
+    }
+}
+
+fn spawn_mode_text(mut commands: Commands) {
+    commands.spawn((
+        Text::new("Mode: \u{2014}"),
+        TextFont {
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.0, 1.0, 0.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(8.0),
+            left: Val::Px(8.0),
+            ..default()
+        },
+        ModeText,
+    ));
+}
+
+fn update_mode_text(
+    gesture_state: Res<GestureState>,
+    mut query: Query<&mut Text, With<ModeText>>,
+) {
+    let Ok(mut text) = query.get_single_mut() else {
+        return;
+    };
+    text.0 = format!("Mode: {}", mode_label(gesture_state.current_gesture));
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +162,36 @@ pub(crate) fn handle_graph_actions(
 ) {
     for event in action_events.read() {
         match &event.action {
+            GraphAction::Pan { delta_x, delta_y } => {
+                if interaction.mode == GraphInteractionMode::GraphView {
+                    camera_cmd.send(CameraCommand {
+                        kind: CameraCommandKind::Pan {
+                            delta_x: *delta_x,
+                            delta_y: *delta_y,
+                        },
+                    });
+                }
+            }
+            GraphAction::Orbit {
+                delta_yaw,
+                delta_pitch,
+            } => {
+                if interaction.mode == GraphInteractionMode::GraphView {
+                    camera_cmd.send(CameraCommand {
+                        kind: CameraCommandKind::Orbit {
+                            delta_yaw: *delta_yaw,
+                            delta_pitch: *delta_pitch,
+                        },
+                    });
+                }
+            }
+            GraphAction::Zoom { amount } => {
+                if interaction.mode == GraphInteractionMode::GraphView {
+                    camera_cmd.send(CameraCommand {
+                        kind: CameraCommandKind::Zoom(*amount),
+                    });
+                }
+            }
             GraphAction::Navigate {
                 delta_x,
                 delta_y,
