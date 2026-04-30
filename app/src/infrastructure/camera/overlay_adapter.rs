@@ -50,7 +50,7 @@ fn update_preview_texture(
     query: Query<&Sprite, With<PreviewVideoRoot>>,
     mut q_transform: Query<&mut Transform, (With<PreviewVideoRoot>, Without<Camera>)>,
     windows: Query<&Window>,
-    mut pip_rect: ResMut<HandOverlayConfig>,
+    mut overlay_config: ResMut<HandOverlayConfig>,
 ) {
     let camera_res = match camera_res {
         Some(r) => r,
@@ -92,11 +92,11 @@ fn update_preview_texture(
             let pip_h = pip_w * (CAMERA_HEIGHT as f32 / CAMERA_WIDTH as f32);
             let margin = PIP_MARGIN;
 
-            pip_rect.enabled = true;
-            pip_rect.left = ww - pip_w - margin;
-            pip_rect.top = margin;
-            pip_rect.width = pip_w;
-            pip_rect.height = pip_h;
+            overlay_config.enabled = true;
+            overlay_config.left = ww - pip_w - margin;
+            overlay_config.top = margin;
+            overlay_config.width = pip_w;
+            overlay_config.height = pip_h;
 
             if let Ok(mut transform) = q_transform.get_single_mut() {
                 transform.translation = Vec3::new(
