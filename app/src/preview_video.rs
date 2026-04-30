@@ -12,8 +12,8 @@ pub struct PreviewVideoPlugin;
 
 impl Plugin for PreviewVideoPlugin {
     fn build(&self, app: &mut App) {
-        app        .add_systems(Startup, setup_preview_video)
-        .add_systems(Update, update_preview_texture);
+        app.add_systems(Startup, setup_preview_video)
+            .add_systems(Update, update_preview_texture);
     }
 }
 
@@ -35,16 +35,9 @@ fn setup_preview_video(
     let texture_handle = images.add(image);
 
     commands.spawn((
-        ImageNode {
+        Sprite {
             image: texture_handle,
-            ..default()
-        },
-        Node {
-            position_type: PositionType::Absolute,
-            right: Val::Px(8.0),
-            top: Val::Px(8.0),
-            width: Val::Percent(20.0),
-            aspect_ratio: Some(640.0 / 480.0),
+            custom_size: Some(Vec2::new(width as f32, height as f32)),
             ..default()
         },
         PreviewVideoRoot,
@@ -54,7 +47,8 @@ fn setup_preview_video(
 fn update_preview_texture(
     camera_res: Option<Res<CameraResource>>,
     mut images: ResMut<Assets<Image>>,
-    query: Query<&ImageNode, With<PreviewVideoRoot>>,
+    query: Query<&Sprite, With<PreviewVideoRoot>>,
+    mut q_transform: Query<&mut Transform, (With<PreviewVideoRoot>, Without<Camera>)>,
     windows: Query<&Window>,
     mut pip_rect: ResMut<PipRect>,
 ) {
@@ -73,9 +67,9 @@ fn update_preview_texture(
         None => return,
     };
 
-    let Ok(image_node) = query.get_single() else { return };
+    let Ok(sprite) = query.get_single() else { return };
 
-    if let Some(image) = images.get_mut(&image_node.image) {
+    if let Some(image) = images.get_mut(&sprite.image) {
         let expected = (frame.width * frame.height * 4) as usize;
         if image.data.len() == expected && frame.data.len() >= expected {
             image.data[..expected].copy_from_slice(&frame.data[..expected]);
@@ -96,13 +90,26 @@ fn update_preview_texture(
         if ww > 0.0 && wh > 0.0 {
             let pip_w = ww * 0.2;
             let pip_h = pip_w * (480.0 / 640.0);
-            let pip_right = 8.0;
-            let pip_top = 8.0;
+            let margin = 8.0;
+
             pip_rect.enabled = true;
-            pip_rect.left = ww - pip_w - pip_right;
-            pip_rect.top = pip_top;
+            pip_rect.left = ww - pip_w - margin;
+            pip_rect.top = margin;
             pip_rect.width = pip_w;
             pip_rect.height = pip_h;
+
+            if let Ok(mut transform) = q_transform.get_single_mut() {
+                transform.translation = Vec3::new(
+                    ww * 0.5 - margin - pip_w * 0.5,
+                    wh * 0.5 - margin - pip_h * 0.5,
+                    0.0,
+                );
+                transform.scale = Vec3::new(
+                    pip_w / frame.width as f32,
+                    pip_h / frame.height as f32,
+                    1.0,
+                );
+            }
         }
     }
 }
