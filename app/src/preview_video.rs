@@ -19,7 +19,6 @@ impl Plugin for PreviewVideoPlugin {
 fn setup_preview_video(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    windows: Query<&Window>,
 ) {
     let width = 640u32;
     let height = 480u32;
@@ -38,34 +37,21 @@ fn setup_preview_video(
     );
     let texture_handle = images.add(image);
 
+    // Render camera feed as a full-screen UI Image node.
+    // Bevy's UI camera renders this behind the gizmo Camera2d (order:1).
     commands.spawn((
-        Camera2d,
-        Camera {
-            order: 0,
-            clear_color: ClearColorConfig::Default,
-            ..default()
-        },
-    ));
-
-    let win_size = windows.get_single().ok();
-    let (ww, wh) = win_size
-        .map(|w| (w.width(), w.height()))
-        .unwrap_or((1280.0, 720.0));
-
-    let scale = if ww > 0.0 && wh > 0.0 {
-        (ww / width as f32).min(wh / height as f32)
-    } else {
-        1.0
-    };
-
-    commands.spawn((
-        Sprite {
+        ImageNode {
             image: texture_handle,
-            custom_size: Some(Vec2::new(width as f32, height as f32)),
             ..default()
         },
-        Transform::from_scale(Vec3::splat(scale)),
-        Visibility::Visible,
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
+            top: Val::Px(0.0),
+            bottom: Val::Px(0.0),
+            ..default()
+        },
         PreviewVideoRoot,
     ));
 }
@@ -73,8 +59,7 @@ fn setup_preview_video(
 fn update_preview_texture(
     camera_res: Option<Res<CameraResource>>,
     mut images: ResMut<Assets<Image>>,
-    mut query: Query<(&mut Transform, &mut Sprite), With<PreviewVideoRoot>>,
-    windows: Query<&Window>,
+    query: Query<&ImageNode, With<PreviewVideoRoot>>,
 ) {
     let Some(camera_res) = camera_res else { return };
 
@@ -83,10 +68,10 @@ fn update_preview_texture(
         guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
     };
 
-    let Ok((mut transform, sprite)) = query.get_single_mut() else { return };
+    let Ok(image_node) = query.get_single() else { return };
 
     if let Some((data, w, h)) = frame_data {
-        if let Some(image) = images.get_mut(&sprite.image) {
+        if let Some(image) = images.get_mut(&image_node.image) {
             let expected = (w * h * 4) as usize;
             if image.data.len() == expected {
                 image.data[..expected].copy_from_slice(&data[..expected]);
@@ -102,15 +87,6 @@ fn update_preview_texture(
                     TextureFormat::Rgba8UnormSrgb,
                     RenderAssetUsages::MAIN_WORLD,
                 );
-            }
-        }
-
-        if let Ok(window) = windows.get_single() {
-            let ww = window.width();
-            let wh = window.height();
-            if ww > 0.0 && wh > 0.0 {
-                let scale = (ww / w as f32).min(wh / h as f32);
-                transform.scale = Vec3::splat(scale);
             }
         }
     }
