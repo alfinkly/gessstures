@@ -7,9 +7,7 @@ use nokhwa::utils::{
 };
 use nokhwa::Camera;
 
-const CAPTURE_WIDTH: u32 = 640;
-const CAPTURE_HEIGHT: u32 = 480;
-const CAPTURE_FPS: u32 = 30;
+use hand_tracking_core::config::*;
 
 #[derive(Clone)]
 pub struct CameraFrame {
@@ -104,12 +102,12 @@ fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<At
 
 fn open_camera() -> Result<Camera, nokhwa::NokhwaError> {
     let attempts: &[(u32, u32, u32, FrameFormat)] = &[
-        (640, 480, 30, FrameFormat::MJPEG),
-        (640, 480, 15, FrameFormat::MJPEG),
-        (1280, 720, 30, FrameFormat::MJPEG),
-        (640, 480, 30, FrameFormat::YUYV),
-        (640, 480, 30, FrameFormat::NV12),
-        (640, 480, 30, FrameFormat::RAWRGB),
+        (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, FrameFormat::MJPEG),
+        (CAMERA_WIDTH, CAMERA_HEIGHT, 15, FrameFormat::MJPEG),
+        (1280, 720, CAMERA_FPS, FrameFormat::MJPEG),
+        (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, FrameFormat::YUYV),
+        (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, FrameFormat::NV12),
+        (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, FrameFormat::RAWRGB),
     ];
 
     for &(w, h, fps, fmt) in attempts {

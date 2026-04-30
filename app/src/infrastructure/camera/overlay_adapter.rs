@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 use crate::infrastructure::camera::capture_adapter::CameraResource;
-use hand_tracking_core::HandOverlayConfig;
+use hand_tracking_core::{HandOverlayConfig, config::*};
 
 #[derive(Component)]
 pub struct PreviewVideoRoot;
@@ -21,8 +21,8 @@ fn setup_preview_video(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let width = 640u32;
-    let height = 480u32;
+    let width = CAMERA_WIDTH;
+    let height = CAMERA_HEIGHT;
     let data = vec![0u8; (width * height * 4) as usize];
 
     let image = Image::new(
@@ -88,9 +88,9 @@ fn update_preview_texture(
         let ww = window.width();
         let wh = window.height();
         if ww > 0.0 && wh > 0.0 {
-            let pip_w = ww * 0.2;
-            let pip_h = pip_w * (480.0 / 640.0);
-            let margin = 8.0;
+            let pip_w = ww * PIP_WIDTH_RATIO;
+            let pip_h = pip_w * (CAMERA_HEIGHT as f32 / CAMERA_WIDTH as f32);
+            let margin = PIP_MARGIN;
 
             pip_rect.enabled = true;
             pip_rect.left = ww - pip_w - margin;

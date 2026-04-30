@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crate::infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use crate::infrastructure::camera::overlay_adapter::PreviewVideoPlugin;
 use crate::infrastructure::ml::mediapipe_sidecar::SidecarPlugin;
-use crate::hand_renderer::HandRendererPlugin;
+use crate::interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
 use hand_tracking_core::{HandLandmarkResource, HandOverlayConfig};
 
 pub struct PreviewPlugin;
@@ -22,7 +22,7 @@ impl Plugin for PreviewPlugin {
         app.init_resource::<HandLandmarkResource>()
            .add_plugins(SidecarPlugin);
 
-        app.add_plugins(HandRendererPlugin);
+        app.add_plugins(SkeletonRendererPlugin);
     }
 }
 

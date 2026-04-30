@@ -4,8 +4,6 @@ mod physics;
 mod camera;
 mod input;
 mod labels;
-mod video_overlay;
-mod hand_renderer;
 mod gesture_detector;
 mod gesture_actions;
 mod cursor_mapper;
@@ -29,7 +27,7 @@ use input::TextInputPlugin;
 use labels::NodeLabelsPlugin;
 use infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use interface::plugins::hand_tracking_plugin::HandTrackingPlugin;
-use hand_renderer::HandRendererPlugin;
+use interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
@@ -105,7 +103,7 @@ fn main() {
                     SidecarPlugin,
                     PreviewVideoPlugin,
                     VertexHighlightPlugin,
-                    HandRendererPlugin,
+                    SkeletonRendererPlugin,
                     GestureDetectorPlugin,
                     GestureActionPlugin,
                     GraphNavigationPlugin,

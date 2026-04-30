@@ -32,9 +32,9 @@ fn connection_color(a: usize, b: usize) -> Color {
     finger_color(idx)
 }
 
-pub struct HandRendererPlugin;
+pub struct SkeletonRendererPlugin;
 
-impl Plugin for HandRendererPlugin {
+impl Plugin for SkeletonRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_overlay)
             .add_systems(Update, (draw_skeleton, update_status_text));
@@ -42,7 +42,7 @@ impl Plugin for HandRendererPlugin {
 }
 
 #[derive(Component)]
-struct StatusLabel;
+struct SkeletonStatusLabel;
 
 fn setup_overlay(
     mut commands: Commands,
@@ -74,7 +74,7 @@ fn setup_overlay(
             left: Val::Px(8.0),
             ..default()
         },
-        StatusLabel,
+        SkeletonStatusLabel,
     ));
 }
 
@@ -136,7 +136,7 @@ fn draw_skeleton(
 fn update_status_text(
     hand_landmarks: Res<HandLandmarkResource>,
     gesture_state: Option<Res<GestureState>>,
-    mut query: Query<&mut Text, With<StatusLabel>>,
+    mut query: Query<&mut Text, With<SkeletonStatusLabel>>,
 ) {
     let Ok(data) = hand_landmarks.inner.lock() else { return };
     let Ok(mut text) = query.get_single_mut() else { return };
