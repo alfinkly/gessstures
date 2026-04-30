@@ -39,7 +39,7 @@ fn setup_video_background(
     );
     let texture_handle = images.add(image);
 
-    let mesh = Mesh::from(Rectangle::from_size(Vec2::new(100.0, 75.0)));
+    let mesh = Mesh::from(Rectangle::from_size(Vec2::new(200.0, 200.0)));
     let mesh_handle = meshes.add(mesh);
 
     let material = StandardMaterial {
@@ -53,7 +53,7 @@ fn setup_video_background(
     commands.spawn((
         Mesh3d(mesh_handle),
         MeshMaterial3d(material_handle),
-        Transform::from_xyz(0.0, 0.0, -50.0),
+        Transform::from_xyz(0.0, 0.0, -20.0),
         VideoBackground,
         VideoTexture(texture_handle),
     ));
@@ -75,7 +75,7 @@ fn update_video_texture(
 
     let expected = (w * h * 4) as usize;
     if image.data.len() == expected {
-        image.data.copy_from_slice(&data);
+        image.data[..expected].copy_from_slice(&data[..expected]);
     } else {
         *image = Image::new(
             Extent3d { width: w, height: h, depth_or_array_layers: 1 },
