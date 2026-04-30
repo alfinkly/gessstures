@@ -23,6 +23,10 @@ impl Plugin for GraphRendererPlugin {
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
+        Camera {
+            order: 1,
+            ..default()
+        },
         Transform::from_xyz(0.0, 8.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }

@@ -25,25 +25,32 @@ pub struct CameraResource {
     pub is_active: Arc<AtomicBool>,
 }
 
+impl CameraResource {
+    fn new() -> (Self, Arc<Mutex<Option<CameraFrame>>>, Arc<AtomicBool>) {
+        let frame = Arc::new(Mutex::new(None));
+        let is_active = Arc::new(AtomicBool::new(false));
+        let res = Self {
+            frame: frame.clone(),
+            is_active: is_active.clone(),
+        };
+        (res, frame, is_active)
+    }
+}
+
 pub struct CameraCapturePlugin;
 
 impl Plugin for CameraCapturePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, start_camera_capture);
+        app.insert_resource(CameraResource::new().0)
+            .add_systems(Startup, start_capture);
+
+        fn start_capture(mut res: ResMut<CameraResource>) {
+            let shared_frame = res.frame.clone();
+            let shared_active = res.is_active.clone();
+            info!("Spawning camera capture thread ...");
+            std::thread::spawn(move || capture_loop(shared_frame, shared_active));
+        }
     }
-}
-
-fn start_camera_capture(mut commands: Commands) {
-    let frame: Arc<Mutex<Option<CameraFrame>>> = Arc::new(Mutex::new(None));
-    let is_active = Arc::new(AtomicBool::new(false));
-
-    commands.insert_resource(CameraResource {
-        frame: frame.clone(),
-        is_active: is_active.clone(),
-    });
-
-    info!("Spawning camera capture thread ...");
-    std::thread::spawn(move || capture_loop(frame, is_active));
 }
 
 fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<AtomicBool>) {
