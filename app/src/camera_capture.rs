@@ -158,18 +158,21 @@ fn decode_jpeg(jpeg_data: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn yuyv_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let expected = (width * height * 2) as usize;
+    if data.len() < expected {
+        warn!("YUYV buffer too small: {} < {}", data.len(), expected);
+        return vec![0u8; (width * height * 4) as usize];
+    }
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         for x in 0..width {
-            let i = ((y * width + x) * 2) as usize;
-            let y_val = data.get(i).copied().unwrap_or(128) as f32;
-            let u = data.get(i + 1).copied().unwrap_or(128) as f32;
-            let v = if x % 2 == 0 {
-                data.get(i + 3).copied().unwrap_or(128) as f32
-            } else {
-                data.get(i - 1).copied().unwrap_or(128) as f32
-            };
-            let cy = y_val - 16.0;
+            let x_even = (x & !1);
+            let base = ((y * width + x_even) * 2) as usize;
+            let yi = base + (x & 1) as usize;
+            let yv = data[yi] as f32;
+            let u = data[base + 1] as f32;
+            let v = data[base + 3] as f32;
+            let cy = yv - 16.0;
             let cu = u - 128.0;
             let cv = v - 128.0;
             rgba.extend_from_slice(&[
@@ -184,16 +187,20 @@ fn yuyv_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
 }
 
 fn nv12_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let y_size = (width * height) as usize;
+    if data.len() < y_size + y_size / 2 {
+        warn!("NV12 buffer too small: {} < {}", data.len(), y_size + y_size / 2);
+        return vec![0u8; (width * height * 4) as usize];
+    }
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    let frame_size = (width * height) as usize;
     for y in 0..height {
         for x in 0..width {
             let yi = (y * width + x) as usize;
-            let y_val = data.get(yi).copied().unwrap_or(128) as f32;
-            let uv_offset = frame_size + ((y / 2) * (width / 2) + (x / 2)) as usize * 2;
-            let u = data.get(uv_offset).copied().unwrap_or(128) as f32;
-            let v = data.get(uv_offset + 1).copied().unwrap_or(128) as f32;
-            let cy = y_val - 16.0;
+            let yv = data[yi] as f32;
+            let uv_base = y_size + ((y / 2) * (width / 2) + (x / 2)) as usize * 2;
+            let u = data.get(uv_base).copied().unwrap_or(128) as f32;
+            let v = data.get(uv_base + 1).copied().unwrap_or(128) as f32;
+            let cy = yv - 16.0;
             let cu = u - 128.0;
             let cv = v - 128.0;
             rgba.extend_from_slice(&[
@@ -206,6 +213,7 @@ fn nv12_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
     }
     rgba
 }
+
 
 fn raw_to_rgba(data: &[u8], width: u32, height: u32, bgr: bool) -> Vec<u8> {
     let pixels = (width * height) as usize;
