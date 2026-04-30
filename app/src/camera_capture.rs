@@ -11,6 +11,7 @@ const CAPTURE_WIDTH: u32 = 640;
 const CAPTURE_HEIGHT: u32 = 480;
 const CAPTURE_FPS: u32 = 30;
 
+#[derive(Clone)]
 pub struct CameraFrame {
     pub data: Vec<u8>,
     pub width: u32,

@@ -47,6 +47,9 @@ impl Default for HandLandmarkResource {
     }
 }
 
+#[derive(Resource)]
+pub struct UseSidecar;
+
 pub struct HandTrackingPlugin;
 
 impl Plugin for HandTrackingPlugin {
@@ -59,7 +62,12 @@ impl Plugin for HandTrackingPlugin {
 fn start_hand_tracking(
     mut commands: Commands,
     camera_resource: Res<CameraResource>,
+    sidecar_mode: Option<Res<UseSidecar>>,
 ) {
+    if sidecar_mode.is_some() {
+        info!("Hand tracking: sidecar mode active, skipping detection loop");
+        return;
+    }
     let landmark_resource = HandLandmarkResource::new();
     let shared = landmark_resource.inner.clone();
     commands.insert_resource(landmark_resource);
@@ -88,7 +96,7 @@ fn detection_loop(
 
         let frame = {
             let mut guard = camera_frame.lock().unwrap();
-            guard.take()
+            guard.as_ref().cloned()
         };
 
         if let Some(frame) = frame {

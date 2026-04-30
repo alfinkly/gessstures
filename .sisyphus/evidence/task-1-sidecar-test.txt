@@ -1,0 +1,29 @@
+Task 1 - Sidecar Test Evidence
+===============================
+Date: 2026-04-30
+Script: app/mediapipe_hands.py
+Command: python3 app/mediapipe_hands.py (run with 4s timeout)
+
+Output:
+-------
+OpenCV: not authorized to capture video (status 0), requesting...
+OpenCV: camera failed to properly initialize!
+[ WARN:0@0.630] global cap_ffmpeg_impl.hpp:1217 open VIDEOIO/FFMPEG: Failed list devices for backend avfoundation
+{"error": "Cannot open camera", "timestamp": 1777551374.9022698}
+
+Result:
+-------
+- Script starts, attempts camera capture
+- No camera available in headless/CI environment -> graceful error
+- JSON output conforms to expected format (valid JSON, flush=True)
+- Error case handled correctly (sys.exit(1) after printing error JSON)
+
+Verification:
+-------------
+- Python imports: mediapipe 0.10.35, opencv 4.13.0, numpy 2.3.4
+- Script syntax: valid (python3 compiles without errors)
+- JSON output: valid JSON with "error" and "timestamp" keys
+- flush=True: verified in source code
+- Camera not available in this env; when camera is present, will output
+  {"detected": true, "landmarks": [[x,y,z], ...21 entries...], "handedness": "...", "timestamp": ...}
+  or {"detected": false, "timestamp": ...}

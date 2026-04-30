@@ -1,0 +1,1 @@
+T4: sidecar.rs created, serde added, cargo check+test pass

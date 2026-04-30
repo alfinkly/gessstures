@@ -1,0 +1,56 @@
+Task 0 Spike: tract-tflite hand_landmark_full.tflite compatibility
+==================================================================
+Date: 2026-04-30
+Platform: macOS ARM64 (Apple Silicon)
+Rust: 1.91.1
+tract-tflite: 0.22.1
+
+RESULT: FAIL
+
+ERROR:
+Translating proto-op from Tflite into tract op: OperatorCode {
+    deprecated_builtin_code: 6,
+    custom_code: None,
+    version: 2,
+    builtin_code: DEQUANTIZE,
+}
+
+Caused by:
+    Unsupported: OperatorCode {
+        deprecated_builtin_code: 6,
+        custom_code: None,
+        version: 2,
+        builtin_code: DEQUANTIZE,
+    }, inputs: [
+        24,F16🟰 24,F16 0.67626953, 0.016159058, ...
+    ]
+
+Model details (via tflite Python library):
+- Input: shape=[1, 224, 224, 3], type=FLOAT32
+- Outputs: Identity [1,63], Identity_1 [1,1], Identity_2 [1,1], Identity_3 [1,63]
+  (all FLOAT32)
+- Total tensors: 269
+- Total ops: 165
+- Model version: 3
+- F16 tensors (weights/biases): 102
+- DEQUANTIZE ops: 102
+- Op types: CONV_2D (3), DEPTHWISE_CONV_2D (4), ADD (0), MEAN(=40), 
+  RESHAPE(=9), LOGISTIC(14), DEQUANTIZE(6)
+- All ops except DEQUANTIZE are supported by tract-tflite
+
+ROOT CAUSE:
+tract-tflite 0.22.1 does NOT handle the TFLite DEQUANTIZE operator (builtin_code=6).
+The MediaPipe full models store weights in float16 format and use DEQUANTIZE ops
+to convert f16→f32 during inference. tract-tflite simply doesn't register a handler
+for DEQUANTIZE in its op registry (registry.rs).
+
+tract-core HAS a Cast operator that could handle f16→f32 conversion, but tract-tflite
+does not wire it up for DEQUANTIZE.
+
+Neither tract-tflite 0.22.1 nor 0.23.0-dev.5 handles DEQUANTIZE.
+
+FALLBACK OPTIONS:
+1. Convert models: Strip DEQUANTIZE ops and convert f16→f32 in the TFLite flatbuffer
+2. Python sidecar: Run official MediaPipe via subprocess (most reliable)
+3. ONNX Runtime (ort crate): Convert models to ONNX, use ort
+4. Implement DEQUANTIZE in tract-tflite: ~20 lines of Rust code, but requires fork

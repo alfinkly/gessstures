@@ -16,6 +16,9 @@ mod nearest_vertex;
 mod vertex_highlight;
 mod content_viewer;
 mod graph_navigation;
+mod preview_video;
+mod sidecar;
+mod preview;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -35,6 +38,8 @@ use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
 use content_viewer::ContentViewerPlugin;
 use graph_navigation::GraphNavigationPlugin;
+use preview_video::PreviewVideoPlugin;
+use preview::PreviewPlugin;
 
 #[derive(Parser)]
 #[command(name = "gessstures", about = "3D graph visualization with hand gestures")]
@@ -64,6 +69,12 @@ pub enum Commands {
         #[arg(short, long, default_value = ".")]
         notes: String,
     },
+    /// Preview mode: webcam + hand skeleton (MediaPipe)
+    Preview {
+        /// Camera device index (default 0)
+        #[arg(short, long, default_value_t = 0)]
+        camera: u32,
+    },
     /// Voice-controlled mode (future)
     Voice,
 }
@@ -91,7 +102,10 @@ fn main() {
                     NodeLabelsPlugin,
                     CameraCapturePlugin,
                     HandTrackingPlugin,
+                ))
+                .add_plugins((
                     VideoOverlayPlugin,
+                    PreviewVideoPlugin,
                     VertexHighlightPlugin,
                     HandRendererPlugin,
                     GestureDetectorPlugin,
@@ -116,6 +130,12 @@ fn main() {
         }
         Commands::Query { query, notes } => {
             println!("Query '{}' on notes folder '{}' (not yet implemented)", query, notes);
+        }
+        Commands::Preview { camera: _cam_idx } => {
+            let mut app = App::new();
+            app.add_plugins(DefaultPlugins)
+               .add_plugins(PreviewPlugin);
+            app.run();
         }
         Commands::Voice => {
             println!("Voice mode (not yet implemented)");

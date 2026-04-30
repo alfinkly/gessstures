@@ -1,0 +1,11 @@
+## Task 2: Add `#[derive(Clone)]` to CameraFrame
+
+### Change
+Added `#[derive(Clone)]` above `pub struct CameraFrame` in `app/src/camera_capture.rs:15`.
+
+### Verification
+- `cargo check -p app`: ✅ Passed (no new warnings)
+- `cargo test -p app`: ✅ Passed (7/7 tests passed)
+
+### Note
+Only pre-existing warnings remain (unused variables, constants, fields). No new warnings introduced.

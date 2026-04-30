@@ -1,0 +1,32 @@
+Task 0 Spike: tract-tflite palm_detection_full.tflite compatibility
+==================================================================
+Date: 2026-04-30
+Platform: macOS ARM64 (Apple Silicon)
+Rust: 1.91.1
+tract-tflite: 0.22.1
+
+RESULT: FAIL
+
+ERROR:
+Same as hand_landmark - DEQUANTIZE operator not supported.
+
+Model details (via tflite Python library):
+- Input: shape=[1, 192, 192, 3], type=FLOAT32
+- Outputs: tensor_279 [?], tensor_276 [?]
+- Total tensors: 413
+- Total ops: 272
+- Model version: 3
+- F16 tensors (weights/biases): 133
+- DEQUANTIZE ops: 133
+- Op types: CONV_2D (3), DEPTHWISE_CONV_2D (4), ADD (0), MAX_POOL_2D (17),
+  PRELU (54), PAD (34), RESHAPE (22), CONCATENATION (2), DEQUANTIZE (6)
+- PROBLEM: PRELU (54) is also NOT registered in tract-tflite
+  (only LEAKY_RELU for code 98 is registered)
+
+ROOT CAUSE:
+Same as hand_landmark - DEQUANTIZE not supported. Additionally, palm_detection
+uses PRELU which is also not registered in tract-tflite's op registry.
+
+FALLBACK OPTIONS:
+Same as hand_landmark. palm_detection has additional op compatibility issues
+(PRELU) that also need resolution.
