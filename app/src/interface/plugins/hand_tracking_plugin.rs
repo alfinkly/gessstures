@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 
-use crate::camera_capture::CameraResource;
+use crate::infrastructure::camera::capture_adapter::{CameraFrame, CameraResource};
 
 pub use hand_tracking_core::{HandLandmark, HandLandmarkData, HandLandmarkResource};
 
@@ -47,7 +47,7 @@ fn start_hand_tracking(
 }
 
 fn detection_loop(
-    camera_frame: Arc<Mutex<Option<crate::camera_capture::CameraFrame>>>,
+    camera_frame: Arc<Mutex<Option<CameraFrame>>>,
     is_active: Arc<AtomicBool>,
     output: Arc<Mutex<HandLandmarkData>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -78,7 +78,7 @@ fn detection_loop(
     }
 }
 
-fn detect_hand_cv(frame: &crate::camera_capture::CameraFrame) -> HandLandmarkData {
+fn detect_hand_cv(frame: &CameraFrame) -> HandLandmarkData {
     let img = match image::RgbaImage::from_raw(frame.width, frame.height, frame.data.clone()) {
         Some(i) => i,
         None => return HandLandmarkData::default(),

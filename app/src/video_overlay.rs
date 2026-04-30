@@ -3,7 +3,7 @@ use bevy::math::primitives::Rectangle;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use crate::camera_capture::CameraResource;
+use crate::infrastructure::camera::capture_adapter::CameraResource;
 
 #[derive(Component)]
 pub struct VideoBackground;

@@ -131,7 +131,7 @@ fn open_camera() -> Result<Camera, nokhwa::NokhwaError> {
     }
 
     Err(nokhwa::NokhwaError::OpenDeviceError(
-        "camera_capture".to_string(),
+        "capture_adapter".to_string(),
         "no supported camera format found".to_string(),
     ))
 }

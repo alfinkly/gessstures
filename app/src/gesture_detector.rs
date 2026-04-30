@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use hand_tracking_core::{Gesture, GestureClassifier};
-use crate::hand_tracking::HandLandmarkResource;
+use hand_tracking_core::HandLandmarkResource;
 
 /// Per-frame event with the debounced gesture and cursor position.
 #[derive(Event, Debug, Clone)]

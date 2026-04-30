@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use crate::camera_capture::CameraCapturePlugin;
-use crate::preview_video::PreviewVideoPlugin;
-use crate::sidecar::SidecarPlugin;
+use crate::infrastructure::camera::capture_adapter::CameraCapturePlugin;
+use crate::infrastructure::camera::overlay_adapter::PreviewVideoPlugin;
+use crate::infrastructure::ml::mediapipe_sidecar::SidecarPlugin;
 use crate::hand_renderer::HandRendererPlugin;
 use hand_tracking_core::{HandLandmarkResource, HandOverlayConfig};
 

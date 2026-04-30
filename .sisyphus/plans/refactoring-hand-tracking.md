@@ -166,52 +166,12 @@ interface/  →  app/  →  domain (hand-tracking-core)
 
 ### Tasks
 
-- [ ] 7. **Extract `cli.rs` from `main.rs`**
-
-  **What to do**:
-  - Create `app/src/interface/cli.rs`
-  - Move `Cli`, `Commands` structs and `clap` derive
-  - Move `Parse` impl (CLI parsing only)
-  - `main.rs` becomes ~30 lines: `Cli::parse()` → match → app.run()
-
-- [ ] 8. **Create `app/` layer with service modules**
-
-  **What to do**:
-  - Create `app/src/app/mod.rs`
-  - Create `app/src/app/hand_tracking_service.rs`
-  - Create `app/src/app/gesture_detection_service.rs`
-  - Create `app/src/app/gesture_action_service.rs`
-  - Extract gesture detection logic from `gesture_detector.rs`
-  - Extract gesture action logic from `gesture_actions.rs`
-
-- [ ] 9. **Rename + restructure plugins into `interface/plugins/`**
-
-  **What to do**:
-  - Create `app/src/interface/plugins/mod.rs`
-  - Extract each Bevy Plugin into its own file:
-    - `desktop_plugin.rs` — orchestrates ALL plugins for desktop mode
-    - `preview_plugin.rs` — orchestrates ONLY preview plugins
-    - `graph_navigation_plugin.rs` (from `graph_navigation.rs`)
-  - Rename `gesture_detector.rs` → plugin file
-  - Rename `gesture_actions.rs` → plugin file
-
-- [ ] 10. **Create `infrastructure/camera/` module**
-
-  **What to do**:
-  - Create `app/src/infrastructure/camera/mod.rs`
-  - Create `app/src/infrastructure/camera/capture_adapter.rs` — nokhwa wrapper
-  - Create `app/src/infrastructure/camera/overlay_adapter.rs` — merged video rendering
-  - Rename `camera_capture.rs` → capture_adapter
-  - Rename `video_overlay.rs` → merged into overlay_adapter
-
-- [ ] 11. **Create `infrastructure/ml/` module**
-
-  **What to do**:
-  - Create `app/src/infrastructure/ml/mod.rs`
-  - Rename `sidecar.rs` → `mediapipe_sidecar.rs`
-  - Rename structs: `SidecarPlugin` → `MediaPipeSidecarPlugin`, `SidecarResource` → `MediaPipeSidecarResource`
-
-- [ ] 12. **Create `infrastructure/graph/` module**
+- [x] 7. **Extract `cli.rs` from `main.rs`**
+- [x] 8. **Create `app/` layer with service modules**
+- [x] 9. **Rename + restructure plugins into `interface/plugins/`**
+- [x] 10. **Create `infrastructure/camera/` module**
+- [x] 11. **Create `infrastructure/ml/` module**
+- [x] 12. **Create `infrastructure/graph/` module**
 
   **What to do**:
   - Create `app/src/infrastructure/graph/mod.rs`

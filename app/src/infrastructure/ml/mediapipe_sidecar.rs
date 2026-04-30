@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use serde::Deserialize;
 
 use hand_tracking_core::{HandLandmark, HandLandmarkData, HandLandmarkResource};
-use crate::hand_tracking::UseSidecar;
+use crate::interface::plugins::hand_tracking_plugin::UseSidecar;
 
 #[derive(Deserialize)]
 struct SidecarOutput {
@@ -134,7 +134,7 @@ fn start_sidecar(mut commands: Commands, hand_landmarks: Res<HandLandmarkResourc
                 }
 
                 if !shutdown_clone.load(Ordering::SeqCst) {
-                    info!("Sidecar exited – restarting in 1 s …");
+                    info!("Sidecar exited \u{2013} restarting in 1 s \u{2026}");
                     std::thread::sleep(Duration::from_secs(1));
                 }
             }
@@ -148,5 +148,5 @@ fn start_sidecar(mut commands: Commands, hand_landmarks: Res<HandLandmarkResourc
         shutdown,
     });
 
-    info!("SidecarPlugin started – hand tracking via Python MediaPipe.");
+    info!("SidecarPlugin started \u{2013} hand tracking via Python MediaPipe.");
 }

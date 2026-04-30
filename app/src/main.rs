@@ -4,10 +4,7 @@ mod physics;
 mod camera;
 mod input;
 mod labels;
-mod camera_capture;
-mod hand_tracking;
 mod video_overlay;
-mod gesture_classifier;
 mod hand_renderer;
 mod gesture_detector;
 mod gesture_actions;
@@ -16,9 +13,10 @@ mod nearest_vertex;
 mod vertex_highlight;
 mod content_viewer;
 mod graph_navigation;
-mod preview_video;
-mod sidecar;
-mod preview;
+
+mod interface;
+mod app;
+mod infrastructure;
 
 use clap::{Parser, Subcommand};
 use bevy::prelude::*;
@@ -29,18 +27,17 @@ use physics::ForceLayoutPlugin;
 use camera::OrbitCameraPlugin;
 use input::TextInputPlugin;
 use labels::NodeLabelsPlugin;
-use camera_capture::CameraCapturePlugin;
-use hand_tracking::HandTrackingPlugin;
-use video_overlay::VideoOverlayPlugin;
+use infrastructure::camera::capture_adapter::CameraCapturePlugin;
+use interface::plugins::hand_tracking_plugin::HandTrackingPlugin;
 use hand_renderer::HandRendererPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
 use content_viewer::ContentViewerPlugin;
 use graph_navigation::GraphNavigationPlugin;
-use preview_video::PreviewVideoPlugin;
-use sidecar::SidecarPlugin;
-use preview::PreviewPlugin;
+use infrastructure::camera::overlay_adapter::PreviewVideoPlugin;
+use infrastructure::ml::mediapipe_sidecar::SidecarPlugin;
+use interface::plugins::preview_plugin::PreviewPlugin;
 
 #[derive(Parser)]
 #[command(name = "gessstures", about = "3D graph visualization with hand gestures")]

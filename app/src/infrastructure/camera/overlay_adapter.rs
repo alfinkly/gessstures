@@ -2,7 +2,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use crate::camera_capture::CameraResource;
+use crate::infrastructure::camera::capture_adapter::CameraResource;
 use hand_tracking_core::HandOverlayConfig;
 
 #[derive(Component)]
