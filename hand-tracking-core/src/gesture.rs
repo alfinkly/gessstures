@@ -5,8 +5,35 @@ pub enum Gesture {
     OpenPalm,
     Fist,
     Pinch,
+    Point,
+    VSIGN,
     Movement,
     Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub struct GestureConfig {
+    pub smoothing_alpha: f32,        // 0.0-1.0, default 0.3
+    pub dead_zone_xy: f32,           // min pixel movement to register, default 0.005
+    pub dead_zone_z: f32,            // min z movement, default 0.003
+    pub point_extend_threshold: f32, // default 0.15
+    pub finger_curl_threshold: f32,  // default 0.08
+    pub swipe_threshold: f32,        // default 0.03
+    pub hold_frames: u32,            // default 30 (0.5s at 60fps)
+}
+
+impl Default for GestureConfig {
+    fn default() -> Self {
+        Self {
+            smoothing_alpha: 0.3,
+            dead_zone_xy: 0.005,
+            dead_zone_z: 0.003,
+            point_extend_threshold: 0.15,
+            finger_curl_threshold: 0.08,
+            swipe_threshold: 0.03,
+            hold_frames: 30,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -17,18 +44,24 @@ pub struct GestureResult {
     pub cursor_y: f32,
     pub delta_x: f32,
     pub delta_y: f32,
+    pub delta_z: f32,
+    pub hand_open_ratio: f32,
 }
 
 pub struct GestureClassifier {
     pub prev_center_x: f32,
     pub prev_center_y: f32,
+    pub prev_avg_z: f32,
+    pub config: GestureConfig,
 }
 
 impl GestureClassifier {
-    pub fn new() -> Self {
+    pub fn new(config: GestureConfig) -> Self {
         Self {
             prev_center_x: 0.5,
             prev_center_y: 0.5,
+            prev_avg_z: 0.0,
+            config,
         }
     }
 
@@ -41,21 +74,30 @@ impl GestureClassifier {
                 cursor_y: self.prev_center_y,
                 delta_x: 0.0,
                 delta_y: 0.0,
+                delta_z: 0.0,
+                hand_open_ratio: 0.0,
             };
         }
 
         let raw_center_x = (landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 4.0;
         let raw_center_y = (landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 4.0;
+        let raw_avg_z = (landmarks[5].z + landmarks[9].z + landmarks[13].z + landmarks[17].z) / 4.0;
 
-        let alpha = 0.3;
+        let alpha = self.config.smoothing_alpha;
         let center_x = alpha * raw_center_x + (1.0 - alpha) * self.prev_center_x;
         let center_y = alpha * raw_center_y + (1.0 - alpha) * self.prev_center_y;
 
-        let delta_x = center_x - self.prev_center_x;
-        let delta_y = center_y - self.prev_center_y;
+        let raw_delta_x = center_x - self.prev_center_x;
+        let raw_delta_y = center_y - self.prev_center_y;
+        let raw_delta_z = raw_avg_z - self.prev_avg_z;
+
+        let delta_x = if raw_delta_x.abs() < self.config.dead_zone_xy { 0.0 } else { raw_delta_x };
+        let delta_y = if raw_delta_y.abs() < self.config.dead_zone_xy { 0.0 } else { raw_delta_y };
+        let delta_z = if raw_delta_z.abs() < self.config.dead_zone_z { 0.0 } else { raw_delta_z };
 
         self.prev_center_x = center_x;
         self.prev_center_y = center_y;
+        self.prev_avg_z = raw_avg_z;
 
         let distances = [
             distance_3d(&landmarks[4], &landmarks[5]),
@@ -65,10 +107,71 @@ impl GestureClassifier {
             distance_3d(&landmarks[20], &landmarks[0]),
         ];
 
+        let hand_open_ratio = distances
+            .iter()
+            .map(|d| ((d - 0.03) / 0.12).clamp(0.0, 1.0))
+            .sum::<f32>()
+            / distances.len() as f32;
+
+        // --- VSIGN detection (highest priority among new gestures) ---
+        {
+            let idx_ext = distance_3d(&landmarks[8], &landmarks[5]);
+            let mid_ext = distance_3d(&landmarks[12], &landmarks[9]);
+            let ring_curl = distance_3d(&landmarks[16], &landmarks[13]);
+            let pinky_curl = distance_3d(&landmarks[20], &landmarks[17]);
+
+            if idx_ext > self.config.point_extend_threshold && mid_ext > self.config.point_extend_threshold && ring_curl < self.config.finger_curl_threshold && pinky_curl < self.config.finger_curl_threshold {
+                let idx_conf = ((idx_ext - self.config.point_extend_threshold) / self.config.point_extend_threshold).clamp(0.0, 1.0);
+                let mid_conf = ((mid_ext - self.config.point_extend_threshold) / self.config.point_extend_threshold).clamp(0.0, 1.0);
+                let confidence = (idx_conf + mid_conf) / 2.0;
+                return GestureResult {
+                    gesture: Gesture::VSIGN,
+                    confidence,
+                    cursor_x: center_x,
+                    cursor_y: center_y,
+                    delta_x,
+                    delta_y,
+                    delta_z,
+                    hand_open_ratio,
+                };
+            }
+        }
+
+        // --- Point detection ---
+        {
+            let idx_ext = distance_3d(&landmarks[8], &landmarks[5]);
+            let mid_curl = distance_3d(&landmarks[12], &landmarks[9]);
+            let ring_curl = distance_3d(&landmarks[16], &landmarks[13]);
+            let pinky_curl = distance_3d(&landmarks[20], &landmarks[17]);
+            let thumb_spread = distance_3d(&landmarks[4], &landmarks[5]);
+
+            if idx_ext > self.config.point_extend_threshold
+                && mid_curl < self.config.finger_curl_threshold
+                && ring_curl < self.config.finger_curl_threshold
+                && pinky_curl < self.config.finger_curl_threshold
+                && thumb_spread > 0.08
+            {
+                let confidence = ((idx_ext - self.config.point_extend_threshold) / self.config.point_extend_threshold).clamp(0.0, 1.0);
+                return GestureResult {
+                    gesture: Gesture::Point,
+                    confidence,
+                    cursor_x: center_x,
+                    cursor_y: center_y,
+                    delta_x,
+                    delta_y,
+                    delta_z,
+                    hand_open_ratio,
+                };
+            }
+        }
+
+        // --- Fist detection ---
         let is_fist = distances.iter().all(|d| *d < 0.06);
 
+        // --- Open palm detection ---
         let is_open_palm = distances.iter().all(|d| *d > 0.1);
 
+        // --- Pinch detection ---
         let pinch_dist = distance_3d(&landmarks[4], &landmarks[8]);
         let is_pinch = pinch_dist < 0.05;
 
@@ -82,6 +185,8 @@ impl GestureClassifier {
                 cursor_y: center_y,
                 delta_x,
                 delta_y,
+                delta_z,
+                hand_open_ratio,
             };
         }
 
@@ -95,6 +200,8 @@ impl GestureClassifier {
                 cursor_y: center_y,
                 delta_x,
                 delta_y,
+                delta_z,
+                hand_open_ratio,
             };
         }
 
@@ -107,6 +214,8 @@ impl GestureClassifier {
                 cursor_y: center_y,
                 delta_x,
                 delta_y,
+                delta_z,
+                hand_open_ratio,
             };
         }
 
@@ -120,6 +229,8 @@ impl GestureClassifier {
                 cursor_y: center_y,
                 delta_x,
                 delta_y,
+                delta_z,
+                hand_open_ratio,
             };
         }
 
@@ -130,13 +241,15 @@ impl GestureClassifier {
             cursor_y: center_y,
             delta_x,
             delta_y,
+            delta_z,
+            hand_open_ratio,
         }
     }
 }
 
 impl Default for GestureClassifier {
     fn default() -> Self {
-        Self::new()
+        Self::new(GestureConfig::default())
     }
 }
 
@@ -203,7 +316,7 @@ mod tests {
     #[test]
     fn test_open_palm() {
         let landmarks = open_palm_landmarks();
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let result = classifier.classify(&landmarks);
         assert_eq!(
             result.gesture,
@@ -244,7 +357,7 @@ mod tests {
     #[test]
     fn test_fist() {
         let landmarks = fist_landmarks();
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let result = classifier.classify(&landmarks);
         assert_eq!(
             result.gesture,
@@ -285,7 +398,7 @@ mod tests {
     #[test]
     fn test_pinch() {
         let landmarks = pinch_landmarks();
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let result = classifier.classify(&landmarks);
         assert_eq!(
             result.gesture,
@@ -299,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_movement() {
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
 
         let frame1 = open_palm_landmarks();
         let r1 = classifier.classify(&frame1);
@@ -335,7 +448,7 @@ mod tests {
             y: 0.5,
             z: 0.0,
         }];
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let result = classifier.classify(&landmarks);
         assert_eq!(result.gesture, Gesture::Unknown);
         assert_eq!(result.confidence, 0.0);
@@ -345,7 +458,7 @@ mod tests {
 
     #[test]
     fn test_exponential_smoothing() {
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let lms = open_palm_landmarks();
         let r = classifier.classify(&lms);
         let expected_x = 0.3 * 0.4625 + 0.7 * 0.5;
@@ -378,7 +491,7 @@ mod tests {
             (17, 0.40, 0.62, 0.0),
             (20, 0.42, 0.63, 0.0),
         ]);
-        let mut classifier = GestureClassifier::new();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
         let result = classifier.classify(&landmarks);
         assert_eq!(
             result.gesture,
@@ -386,5 +499,89 @@ mod tests {
             "Fist should take priority over Pinch when both conditions are met, got {:?}",
             result.gesture,
         );
+    }
+
+    fn point_landmarks() -> Vec<HandLandmark> {
+        make_landmarks(&[
+            (4, 0.62, 0.50, 0.0),
+            (8, 0.50, 0.20, 0.0),
+            (12, 0.50, 0.48, 0.0),
+            (16, 0.50, 0.48, 0.0),
+            (20, 0.50, 0.48, 0.0),
+        ])
+    }
+
+    #[test]
+    fn test_point() {
+        let landmarks = point_landmarks();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
+        let result = classifier.classify(&landmarks);
+        assert_eq!(
+            result.gesture,
+            Gesture::Point,
+            "expected Point, got {:?} (confidence {})",
+            result.gesture,
+            result.confidence,
+        );
+        assert!(result.confidence > 0.0, "confidence should be > 0");
+    }
+
+    fn vsign_landmarks() -> Vec<HandLandmark> {
+        make_landmarks(&[
+            (8, 0.50, 0.20, 0.0),
+            (12, 0.50, 0.20, 0.0),
+            (16, 0.50, 0.48, 0.0),
+            (20, 0.50, 0.48, 0.0),
+        ])
+    }
+
+    #[test]
+    fn test_vsign() {
+        let landmarks = vsign_landmarks();
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
+        let result = classifier.classify(&landmarks);
+        assert_eq!(
+            result.gesture,
+            Gesture::VSIGN,
+            "expected VSIGN, got {:?} (confidence {})",
+            result.gesture,
+            result.confidence,
+        );
+        assert!(result.confidence > 0.0, "confidence should be > 0");
+    }
+
+    #[test]
+    fn test_point_before_fist() {
+        let landmarks = make_landmarks(&[
+            (4, 0.62, 0.50, 0.0),
+            (8, 0.50, 0.20, 0.0),
+            (12, 0.50, 0.48, 0.0),
+            (16, 0.50, 0.48, 0.0),
+            (20, 0.50, 0.48, 0.0),
+        ]);
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
+        let result = classifier.classify(&landmarks);
+        assert_eq!(
+            result.gesture,
+            Gesture::Point,
+            "Point should take priority over Fist when index is extended, got {:?}",
+            result.gesture,
+        );
+    }
+
+    #[test]
+    fn test_dead_zone() {
+        let mut classifier = GestureClassifier::new(GestureConfig::default());
+
+        let frame1 = make_landmarks(&[]);
+        classifier.classify(&frame1);
+
+        let mut frame2 = make_landmarks(&[]);
+        for lm in &mut frame2 {
+            lm.x += 0.001;
+        }
+        let result = classifier.classify(&frame2);
+        assert_eq!(result.delta_x, 0.0, "delta_x should be zero (dead zone)");
+        assert_eq!(result.delta_y, 0.0, "delta_y should be zero (dead zone)");
     }
 }

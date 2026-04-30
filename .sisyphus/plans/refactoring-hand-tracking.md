@@ -189,46 +189,12 @@ interface/  →  app/  →  domain (hand-tracking-core)
 
 ### Tasks
 
-- [ ] 13. **Merge `preview_video` + `video_overlay` → `HandOverlayPlugin`**
-
-  **What to do**:
-  - New unified plugin: `HandOverlayPlugin`
-  - In preview mode: renders as Sprite at top-right (20% width)
-  - In desktop mode: renders as Sprite at top-right (20% width)
-  - Remove separate `VideoOverlayPlugin` (was 3D quad)
-  - Both modes use the SAME unified code path
-  - Config via `HandOverlayConfig` resource
-
-- [ ] 14. **Rename: `hand_renderer.rs` → `SkeletonRendererPlugin`**
-
-  **What to do**:
-  - Rename `app/src/interface/plugins/skeleton_renderer_plugin.rs`
-  - Rename `HandRendererPlugin` → `SkeletonRendererPlugin`
-  - Rename `StatusLabel` → `SkeletonStatusLabel`
-  - No logic changes — just rename
-
-- [ ] 15. **Rename: `hand_tracking.rs` → `HandTrackingPlugin` only**
-
-  **What to do**:
-  - After extracting domain types to `hand-tracking-core`, the remaining Bevy plugin code stays minimal
-  - Rename to reflect single responsibility: `HandTrackingPlugin` only
-
-- [ ] 16. **Extract all hardcoded constants → `hand-tracking-core/src/config.rs`**
-
-  **What to do**:
-  - Replace `640`, `480`, `0.2`, `8.0` in all infrastructure files with `use hand_tracking_core::config::*`
-  - Remove local `CAPTURE_WIDTH`, `CAPTURE_HEIGHT`, `CAPTURE_FPS` from `camera_capture.rs`
-  - Verify no magic numbers remain
-
-- [ ] 17. **Write `ARCHITECTURE.md`**
-
-  **What to do**:
-  - Create `/ARCHITECTURE.md` at project root
-  - Document: layer diagram, dependency rules, naming conventions, crate layout
-  - Document: "one file = one public entity" rule
-  - Template already drafted in this plan's Target Architecture section
-
-- [ ] 18. **Write `REFACTORING.md`**
+- [x] 13. **Merge `preview_video` + `video_overlay` → `HandOverlayPlugin`**
+- [x] 14. **Rename: `hand_renderer.rs` → `SkeletonRendererPlugin`**
+- [x] 15. **Rename: `hand_tracking.rs` → `HandTrackingPlugin` only**
+- [x] 16. **Extract all hardcoded constants → `hand-tracking-core/src/config.rs`**
+- [x] 17. **Write `ARCHITECTURE.md`**
+- [x] 18. **Write `REFACTORING.md`**
 
   **What to do**:
   - Create `/REFACTORING.md` at project root
