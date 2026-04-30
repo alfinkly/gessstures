@@ -19,17 +19,14 @@ impl Plugin for PreviewVideoPlugin {
 fn setup_preview_video(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
+    windows: Query<&Window>,
 ) {
     let width = 640u32;
     let height = 480u32;
     let data = vec![128u8; (width * height * 4) as usize];
 
     let image = Image::new(
-        Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
+        Extent3d { width, height, depth_or_array_layers: 1 },
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
@@ -37,21 +34,34 @@ fn setup_preview_video(
     );
     let texture_handle = images.add(image);
 
-    // Render camera feed as a full-screen UI Image node.
-    // Bevy's UI camera renders this behind the gizmo Camera2d (order:1).
+    // Single Camera2d — renders video sprite + gizmos (from HandRendererPlugin)
     commands.spawn((
-        ImageNode {
+        Camera2d,
+        Camera {
+            order: 0,
+            clear_color: ClearColorConfig::Default,
+            ..default()
+        },
+    ));
+
+    let win_size = windows.get_single().ok();
+    let (ww, wh) = win_size
+        .map(|w| (w.width(), w.height()))
+        .unwrap_or((1280.0, 720.0));
+
+    commands.spawn((
+        Sprite {
             image: texture_handle,
+            custom_size: Some(Vec2::new(width as f32, height as f32)),
             ..default()
         },
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            right: Val::Px(0.0),
-            top: Val::Px(0.0),
-            bottom: Val::Px(0.0),
-            ..default()
-        },
+        Transform::from_scale(Vec3::splat(
+            if ww > 0.0 && wh > 0.0 {
+                (ww / width as f32).min(wh / height as f32)
+            } else {
+                1.0
+            },
+        )),
         PreviewVideoRoot,
     ));
 }
@@ -59,7 +69,9 @@ fn setup_preview_video(
 fn update_preview_texture(
     camera_res: Option<Res<CameraResource>>,
     mut images: ResMut<Assets<Image>>,
-    query: Query<&ImageNode, With<PreviewVideoRoot>>,
+    query: Query<&Sprite, With<PreviewVideoRoot>>,
+    windows: Query<&Window>,
+    mut q_sprite: Query<&mut Transform, (With<PreviewVideoRoot>, Without<Camera>)>,
 ) {
     let Some(camera_res) = camera_res else { return };
 
@@ -68,25 +80,31 @@ fn update_preview_texture(
         guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
     };
 
-    let Ok(image_node) = query.get_single() else { return };
+    let Ok(sprite) = query.get_single() else { return };
 
     if let Some((data, w, h)) = frame_data {
-        if let Some(image) = images.get_mut(&image_node.image) {
+        if let Some(image) = images.get_mut(&sprite.image) {
             let expected = (w * h * 4) as usize;
             if image.data.len() == expected {
                 image.data[..expected].copy_from_slice(&data[..expected]);
             } else {
                 *image = Image::new(
-                    Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
+                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                     TextureDimension::D2,
                     data,
                     TextureFormat::Rgba8UnormSrgb,
                     RenderAssetUsages::MAIN_WORLD,
                 );
+            }
+        }
+
+        if let Ok(mut transform) = q_sprite.get_single_mut() {
+            if let Ok(window) = windows.get_single() {
+                let ww = window.width();
+                let wh = window.height();
+                if ww > 0.0 && wh > 0.0 {
+                    transform.scale = Vec3::splat((ww / w as f32).min(wh / h as f32));
+                }
             }
         }
     }

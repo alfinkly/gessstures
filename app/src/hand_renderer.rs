@@ -44,15 +44,22 @@ impl Plugin for HandRendererPlugin {
 #[derive(Component)]
 struct StatusLabel;
 
-fn setup_overlay(mut commands: Commands) {
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-    ));
+fn setup_overlay(
+    mut commands: Commands,
+    camera_q: Query<&Camera, With<Camera2d>>,
+) {
+    // Only create Camera2d if none exists (e.g. desktop mode).
+    // In preview mode, PreviewVideoPlugin already provides one.
+    if camera_q.is_empty() {
+        commands.spawn((
+            Camera2d,
+            Camera {
+                order: 1,
+                clear_color: ClearColorConfig::None,
+                ..default()
+            },
+        ));
+    }
 
     commands.spawn((
         Text::new("Hand: \u{2014} | Gesture: \u{2014}"),
