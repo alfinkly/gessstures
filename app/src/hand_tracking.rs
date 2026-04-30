@@ -72,6 +72,7 @@ pub struct HandTrackingPlugin;
 impl Plugin for HandTrackingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HandLandmarkResource>()
+            .init_resource::<PipRect>()
             .add_systems(Startup, start_hand_tracking);
     }
 }

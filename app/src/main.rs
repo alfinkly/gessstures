@@ -105,7 +105,6 @@ fn main() {
                 ))
                 .add_plugins((
                     VideoOverlayPlugin,
-                    PreviewVideoPlugin,
                     VertexHighlightPlugin,
                     HandRendererPlugin,
                     GestureDetectorPlugin,
