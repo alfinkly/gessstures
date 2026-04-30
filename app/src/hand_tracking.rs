@@ -50,6 +50,23 @@ impl Default for HandLandmarkResource {
 #[derive(Resource)]
 pub struct UseSidecar;
 
+/// Screen-space rect for Picture-in-Picture overlay (preview mode).
+/// When enabled, the skeleton renders only inside this area.
+#[derive(Resource, Clone, Debug)]
+pub struct PipRect {
+    pub enabled: bool,
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl Default for PipRect {
+    fn default() -> Self {
+        Self { enabled: false, left: 0.0, top: 0.0, width: 0.0, height: 0.0 }
+    }
+}
+
 pub struct HandTrackingPlugin;
 
 impl Plugin for HandTrackingPlugin {

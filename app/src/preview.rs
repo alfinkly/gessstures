@@ -3,13 +3,14 @@ use crate::camera_capture::CameraCapturePlugin;
 use crate::preview_video::PreviewVideoPlugin;
 use crate::sidecar::SidecarPlugin;
 use crate::hand_renderer::HandRendererPlugin;
-use crate::hand_tracking::HandLandmarkResource;
+use crate::hand_tracking::{HandLandmarkResource, PipRect};
 
 pub struct PreviewPlugin;
 
 impl Plugin for PreviewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FpsCounter>()
+           .init_resource::<PipRect>()
            .add_systems(Startup, show_loading)
            .add_systems(Update, (check_exit, loading_fade, update_fps_counter));
 
