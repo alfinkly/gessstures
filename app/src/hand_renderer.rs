@@ -101,13 +101,14 @@ fn draw_skeleton(
         .unwrap_or((false, 0.0, 0.0, w, h));
 
     let to_world = |x: f32, y: f32| -> Vec2 {
+        // Mirror x to match the mirrored webcam feed
         if use_pip {
             Vec2::new(
-                pip_left + x * pip_w - w * 0.5,
+                pip_left + (1.0 - x) * pip_w - w * 0.5,
                 h * 0.5 - pip_top - (1.0 - y) * pip_h,
             )
         } else {
-            Vec2::new(x * w - w * 0.5, h * 0.5 - y * h)
+            Vec2::new((1.0 - x) * w - w * 0.5, h * 0.5 - y * h)
         }
     };
 
