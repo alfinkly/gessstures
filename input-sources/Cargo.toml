@@ -1,0 +1,9 @@
+[package]
+name = "input_sources"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+graph_core = { path = "../graph-core" }
+bevy = "0.15"
+async-trait = "0.1"

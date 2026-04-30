@@ -138,9 +138,11 @@ fn update_content_panel(
     graph: Res<GraphResource>,
     notes_dir: Res<NotesDirectory>,
     mut panel_q: Query<(&mut Node, &mut ContentLoadState), With<ContentPanel>>,
-    mut title_q: Query<&mut Text, (With<ContentPanelTitle>, Without<ContentPanelPath>)>,
-    mut path_q: Query<&mut Text, (With<ContentPanelPath>, Without<ContentPanelBody>)>,
-    mut body_q: Query<&mut Text, With<ContentPanelBody>>,
+    mut texts: ParamSet<(
+        Query<&mut Text, With<ContentPanelTitle>>,
+        Query<&mut Text, With<ContentPanelPath>>,
+        Query<&mut Text, With<ContentPanelBody>>,
+    )>,
 ) {
     let Ok((mut panel_node, mut load_state)) = panel_q.get_single_mut() else {
         return;
@@ -170,13 +172,13 @@ fn update_content_panel(
 
     load_state.last_node_id = Some(node_data.id.clone());
 
-    if let Ok(mut title_text) = title_q.get_single_mut() {
+    if let Ok(mut title_text) = texts.p0().get_single_mut() {
         title_text.0 = node_data.label.clone();
     }
-    if let Ok(mut path_text) = path_q.get_single_mut() {
+    if let Ok(mut path_text) = texts.p1().get_single_mut() {
         path_text.0 = node_data.id.clone();
     }
-    if let Ok(mut body_text) = body_q.get_single_mut() {
+    if let Ok(mut body_text) = texts.p2().get_single_mut() {
         body_text.0 = content;
     }
 }

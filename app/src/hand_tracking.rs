@@ -78,13 +78,12 @@ fn start_hand_tracking(
     let shared = landmark_resource.inner.clone();
     commands.insert_resource(landmark_resource);
 
-    let Some(cam) = camera_resource else {
-        warn!("HandTracking: CameraResource not available – inference disabled");
-        return;
-    };
-
-    let camera_frame = cam.frame.clone();
-    let is_active = cam.is_active.clone();
+    let camera_frame = camera_resource
+        .as_ref()
+        .map(|cam| cam.frame.clone());
+    let is_active = camera_resource
+        .as_ref()
+        .map(|cam| cam.is_active.clone());
 
     info!("Spawning hand-tracking inference thread ...");
     std::thread::spawn(move || {
@@ -95,15 +94,24 @@ fn start_hand_tracking(
 }
 
 fn inference_loop(
-    camera_frame: Arc<Mutex<Option<crate::camera_capture::CameraFrame>>>,
-    is_active: Arc<AtomicBool>,
+    camera_frame: Option<Arc<Mutex<Option<crate::camera_capture::CameraFrame>>>>,
+    is_active: Option<Arc<AtomicBool>>,
     output: Arc<Mutex<HandLandmarkData>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut model = Session::builder()?
         .commit_from_file("models/hand_landmark_full.tflite")?;
     info!("Hand-landmark model loaded successfully");
 
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Wait for camera to become available
+    let (camera_frame, is_active) = loop {
+        if let (Some(f), Some(a)) = (&camera_frame, &is_active) {
+            if a.load(Ordering::SeqCst) {
+                break (f.clone(), a.clone());
+            }
+        }
+        info!("HandTracking: waiting for camera...");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    };
 
     loop {
         if !is_active.load(Ordering::SeqCst) {

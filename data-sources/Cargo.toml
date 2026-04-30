@@ -1,0 +1,12 @@
+[package]
+name = "data_sources"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+graph_core = { path = "../graph-core" }
+serde = { version = "1", features = ["derive"] }
+async-trait = "0.1"
+anyhow = "1"
+walkdir = "2"
+pulldown-cmark = "0.12"

@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "graph-core",
+    "ai-pipeline",
+    "data-sources",
+    "input-sources",
+    "app",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
