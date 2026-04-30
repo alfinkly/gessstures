@@ -39,6 +39,7 @@ use gesture_actions::GestureActionPlugin;
 use content_viewer::ContentViewerPlugin;
 use graph_navigation::GraphNavigationPlugin;
 use preview_video::PreviewVideoPlugin;
+use sidecar::SidecarPlugin;
 use preview::PreviewPlugin;
 
 #[derive(Parser)]
@@ -104,7 +105,8 @@ fn main() {
                     HandTrackingPlugin,
                 ))
                 .add_plugins((
-                    VideoOverlayPlugin,
+                    SidecarPlugin,
+                    PreviewVideoPlugin,
                     VertexHighlightPlugin,
                     HandRendererPlugin,
                     GestureDetectorPlugin,
