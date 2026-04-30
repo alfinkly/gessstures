@@ -81,6 +81,7 @@ fn main() {
                 .add_event::<CameraCommand>()
                 .add_event::<GraphChanged>()
                 .init_resource::<GraphResource>()
+                .init_resource::<InteractionState>()
                 .add_plugins((
                     GraphBuilderPlugin,
                     GraphRendererPlugin,

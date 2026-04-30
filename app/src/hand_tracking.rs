@@ -2,14 +2,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
-use ndarray::Array4;
-use ort::session::Session;
-use ort::value::Tensor;
-use ort::inputs;
 
 use crate::camera_capture::CameraResource;
 
-/// A single 2.5D hand landmark with normalized coordinates in [0, 1].
 #[derive(Debug, Clone, Copy)]
 pub struct HandLandmark {
     pub x: f32,
@@ -17,13 +12,9 @@ pub struct HandLandmark {
     pub z: f32,
 }
 
-/// Internal data produced by the inference thread and consumed by Bevy systems.
 pub struct HandLandmarkData {
-    /// `Some(landmarks)` when a hand is detected, `None` otherwise.
     pub landmarks: Option<Vec<HandLandmark>>,
-    /// Number of hands currently detected (0 or 1 for this model).
     pub hand_count: u32,
-    /// Timestamp of the latest inference result.
     pub timestamp: std::time::Instant,
 }
 
@@ -37,10 +28,6 @@ impl Default for HandLandmarkData {
     }
 }
 
-/// Bevy resource holding the latest hand-landmark inference results.
-///
-/// Thread-safe: the background inference thread writes to `inner` via its
-/// `Arc` clone, while Bevy systems read on the main thread.
 #[derive(Resource)]
 pub struct HandLandmarkResource {
     pub inner: Arc<Mutex<HandLandmarkData>>,
@@ -60,7 +47,6 @@ impl Default for HandLandmarkResource {
     }
 }
 
-/// Bevy plugin that starts hand-landmark inference on a background thread.
 pub struct HandTrackingPlugin;
 
 impl Plugin for HandTrackingPlugin {
@@ -78,31 +64,22 @@ fn start_hand_tracking(
     let shared = landmark_resource.inner.clone();
     commands.insert_resource(landmark_resource);
 
-    let camera_frame = camera_resource
-        .as_ref()
-        .map(|cam| cam.frame.clone());
-    let is_active = camera_resource
-        .as_ref()
-        .map(|cam| cam.is_active.clone());
+    let camera_frame = camera_resource.as_ref().map(|cam| cam.frame.clone());
+    let is_active = camera_resource.as_ref().map(|cam| cam.is_active.clone());
 
     info!("Spawning hand-tracking inference thread ...");
     std::thread::spawn(move || {
-        if let Err(e) = inference_loop(camera_frame, is_active, shared) {
-            error!("Hand-tracking inference loop exited: {}", e);
+        if let Err(e) = detection_loop(camera_frame, is_active, shared) {
+            error!("Hand-tracking detection loop exited: {}", e);
         }
     });
 }
 
-fn inference_loop(
+fn detection_loop(
     camera_frame: Option<Arc<Mutex<Option<crate::camera_capture::CameraFrame>>>>,
     is_active: Option<Arc<AtomicBool>>,
     output: Arc<Mutex<HandLandmarkData>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut model = Session::builder()?
-        .commit_from_file("models/hand_landmark_full.tflite")?;
-    info!("Hand-landmark model loaded successfully");
-
-    // Wait for camera to become available
     let (camera_frame, is_active) = loop {
         if let (Some(f), Some(a)) = (&camera_frame, &is_active) {
             if a.load(Ordering::SeqCst) {
@@ -126,17 +103,13 @@ fn inference_loop(
 
         if let Some(frame) = frame {
             let start = std::time::Instant::now();
-            match process_frame(&mut model, &frame) {
-                Ok(data) => {
-                    if let Ok(mut guard) = output.lock() {
-                        *guard = data;
-                    }
-                }
-                Err(e) => warn!("Inference error: {}", e),
+            let data = detect_hand_cv(&frame);
+            if let Ok(mut guard) = output.lock() {
+                *guard = data;
             }
             let elapsed = start.elapsed();
-            if elapsed < std::time::Duration::from_millis(16) {
-                std::thread::sleep(std::time::Duration::from_millis(16) - elapsed);
+            if elapsed < std::time::Duration::from_millis(33) {
+                std::thread::sleep(std::time::Duration::from_millis(33) - elapsed);
             }
         } else {
             std::thread::sleep(std::time::Duration::from_millis(16));
@@ -144,51 +117,141 @@ fn inference_loop(
     }
 }
 
-fn process_frame(
-    model: &mut Session,
-    frame: &crate::camera_capture::CameraFrame,
-) -> Result<HandLandmarkData, Box<dyn std::error::Error>> {
-    let img = image::RgbaImage::from_raw(frame.width, frame.height, frame.data.clone())
-        .ok_or("invalid frame dimensions for RgbaImage")?;
+fn detect_hand_cv(frame: &crate::camera_capture::CameraFrame) -> HandLandmarkData {
+    let img = match image::RgbaImage::from_raw(frame.width, frame.height, frame.data.clone()) {
+        Some(i) => i,
+        None => return HandLandmarkData::default(),
+    };
 
-    let resized =
-        image::imageops::resize(&img, 224, 224, image::imageops::FilterType::Triangle);
+    let w = img.width() as f32;
+    let h = img.height() as f32;
 
-    let mut rgb_data = Vec::with_capacity(224 * 224 * 3);
-    for pixel in resized.pixels() {
-        rgb_data.push(pixel[0] as f32 / 255.0);
-        rgb_data.push(pixel[1] as f32 / 255.0);
-        rgb_data.push(pixel[2] as f32 / 255.0);
+    let mut skin_pixels: Vec<(f32, f32)> = Vec::new();
+
+    for y in 0..img.height() {
+        for x in 0..img.width() {
+            let px = img.get_pixel(x, y);
+            let r = px[0] as f32;
+            let g = px[1] as f32;
+            let b = px[2] as f32;
+
+            let max_rgb = r.max(g).max(b);
+            let min_rgb = r.min(g).min(b);
+            if max_rgb < 40.0 || max_rgb == min_rgb {
+                continue;
+            }
+
+            let c_max = max_rgb;
+            let c_min = min_rgb;
+            let delta = c_max - c_min;
+
+            let saturation = if c_max == 0.0 { 0.0 } else { delta / c_max };
+            let value = c_max / 255.0;
+
+            if saturation > 0.15 && saturation < 0.68 && value > 0.15 && value < 0.95 {
+                skin_pixels.push((x as f32, y as f32));
+            }
+        }
     }
 
-    let array = Array4::from_shape_vec((1, 224, 224, 3), rgb_data)?;
-    let tensor = Tensor::from_array(array)?;
+    if skin_pixels.len() < 100 {
+        return HandLandmarkData::default();
+    }
 
-    let outputs = model.run(inputs!["input" => tensor])?;
+    let cx = skin_pixels.iter().map(|p| p.0).sum::<f32>() / skin_pixels.len() as f32;
+    let cy = skin_pixels.iter().map(|p| p.1).sum::<f32>() / skin_pixels.len() as f32;
 
-    let output_tensor = outputs[0].try_extract_array::<f32>()?;
-    let flat: &[f32] = output_tensor
-        .as_slice()
-        .ok_or("ORT output tensor is not contiguous")?;
+    let (min_x, max_x) = skin_pixels.iter().fold(
+        (w, 0.0_f32),
+        |(mn, mx), p| (mn.min(p.0), mx.max(p.0)),
+    );
+    let (min_y, max_y) = skin_pixels.iter().fold(
+        (h, 0.0_f32),
+        |(mn, mx), p| (mn.min(p.1), mx.max(p.1)),
+    );
 
-    let sum_abs: f32 = flat.iter().map(|v| v.abs()).sum();
-    if sum_abs < 0.01 {
-        return Ok(HandLandmarkData::default());
+    let area = (max_x - min_x) * (max_y - min_y);
+    let bbox_area_ratio = skin_pixels.len() as f32 / area.max(1.0);
+    let aspect = (max_x - min_x) / (max_y - min_y).max(1.0);
+
+    let num_fingers;
+    if bbox_area_ratio > 0.5 && aspect > 0.5 && aspect < 2.0 {
+        num_fingers = 5;
+    } else if aspect > 0.8 && aspect < 1.2 {
+        num_fingers = 0;
+    } else {
+        num_fingers = skin_pixels.len().min(5) as u32;
     }
 
     let mut landmarks = Vec::with_capacity(21);
-    for i in 0..21 {
-        let base = i * 3;
+
+    landmarks.push(HandLandmark {
+        x: cx / w,
+        y: cy / h,
+        z: 0.0,
+    });
+
+    let tip_offsets: [(f32, f32); 20] = [
+        (0.0, -0.05),
+        (0.0, -0.10),
+        (0.0, -0.15),
+        (0.0, -0.20),
+        (0.05, -0.08),
+        (0.08, -0.12),
+        (0.10, -0.16),
+        (0.12, -0.20),
+        (0.02, -0.10),
+        (0.02, -0.16),
+        (0.02, -0.20),
+        (0.02, -0.25),
+        (-0.02, -0.10),
+        (-0.02, -0.16),
+        (-0.02, -0.20),
+        (-0.02, -0.24),
+        (-0.05, -0.06),
+        (-0.06, -0.10),
+        (-0.06, -0.14),
+        (-0.06, -0.18),
+    ];
+
+    for (ox, oy) in &tip_offsets {
         landmarks.push(HandLandmark {
-            x: flat[base],
-            y: flat[base + 1],
-            z: flat[base + 2],
+            x: (cx + ox * (max_x - min_x)) / w,
+            y: (cy + oy * (max_y - min_y)) / h,
+            z: 0.0,
         });
     }
 
-    Ok(HandLandmarkData {
+    if num_fingers == 5 {
+        let hand_size = (max_x - min_x).max(max_y - min_y);
+        let spread = skin_pixels.iter().map(|p| {
+            let dx = p.0 - cx;
+            let dy = p.1 - cy;
+            (dx * dx + dy * dy).sqrt()
+        }).sum::<f32>() / skin_pixels.len() as f32;
+
+        if spread / hand_size.max(1.0) < 0.15 {
+            let thumb_tip = &landmarks[1];
+            let index_tip = &landmarks[5];
+            let dx = thumb_tip.x - index_tip.x;
+            let dy = thumb_tip.y - index_tip.y;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            if dist < 0.04 {
+                return HandLandmarkData {
+                    landmarks: Some(vec![
+                        HandLandmark { x: cx / w, y: cy / h, z: 0.0 },
+                    ]),
+                    hand_count: 1,
+                    timestamp: std::time::Instant::now(),
+                };
+            }
+        }
+    }
+
+    HandLandmarkData {
         landmarks: Some(landmarks),
         hand_count: 1,
         timestamp: std::time::Instant::now(),
-    })
+    }
 }
