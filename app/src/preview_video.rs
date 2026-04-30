@@ -23,7 +23,7 @@ fn setup_preview_video(
 ) {
     let width = 640u32;
     let height = 480u32;
-    let data = vec![0u8; (width * height * 4) as usize];
+    let data = vec![128u8; (width * height * 4) as usize];
 
     let image = Image::new(
         Extent3d {
@@ -42,20 +42,18 @@ fn setup_preview_video(
         Camera2d,
         Camera {
             order: 0,
+            clear_color: ClearColorConfig::Default,
             ..default()
         },
     ));
 
-    let scale = if let Ok(window) = windows.get_single() {
-        let vw = width as f32;
-        let vh = height as f32;
-        let ww = window.width();
-        let wh = window.height();
-        if ww > 0.0 && wh > 0.0 {
-            (ww / vw).min(wh / vh)
-        } else {
-            1.0
-        }
+    let win_size = windows.get_single().ok();
+    let (ww, wh) = win_size
+        .map(|w| (w.width(), w.height()))
+        .unwrap_or((1280.0, 720.0));
+
+    let scale = if ww > 0.0 && wh > 0.0 {
+        (ww / width as f32).min(wh / height as f32)
     } else {
         1.0
     };
@@ -63,9 +61,11 @@ fn setup_preview_video(
     commands.spawn((
         Sprite {
             image: texture_handle,
+            custom_size: Some(Vec2::new(width as f32, height as f32)),
             ..default()
         },
         Transform::from_scale(Vec3::splat(scale)),
+        Visibility::Visible,
         PreviewVideoRoot,
     ));
 }
@@ -82,37 +82,36 @@ fn update_preview_texture(
         let guard = camera_res.frame.lock().unwrap();
         guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
     };
-    let Some((data, w, h)) = frame_data else { return };
 
     let Ok((mut transform, sprite)) = query.get_single_mut() else { return };
 
-    if let Some(image) = images.get_mut(&sprite.image) {
-        let expected = (w * h * 4) as usize;
-        if image.data.len() == expected {
-            image.data[..expected].copy_from_slice(&data[..expected]);
-        } else {
-            *image = Image::new(
-                Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-                TextureDimension::D2,
-                data,
-                TextureFormat::Rgba8UnormSrgb,
-                RenderAssetUsages::MAIN_WORLD,
-            );
+    if let Some((data, w, h)) = frame_data {
+        if let Some(image) = images.get_mut(&sprite.image) {
+            let expected = (w * h * 4) as usize;
+            if image.data.len() == expected {
+                image.data[..expected].copy_from_slice(&data[..expected]);
+            } else {
+                *image = Image::new(
+                    Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    TextureDimension::D2,
+                    data,
+                    TextureFormat::Rgba8UnormSrgb,
+                    RenderAssetUsages::MAIN_WORLD,
+                );
+            }
         }
-    }
 
-    if let Ok(window) = windows.get_single() {
-        let vw = w as f32;
-        let vh = h as f32;
-        let ww = window.width();
-        let wh = window.height();
-        if ww > 0.0 && wh > 0.0 {
-            let scale = (ww / vw).min(wh / vh);
-            transform.scale = Vec3::splat(scale);
+        if let Ok(window) = windows.get_single() {
+            let ww = window.width();
+            let wh = window.height();
+            if ww > 0.0 && wh > 0.0 {
+                let scale = (ww / w as f32).min(wh / h as f32);
+                transform.scale = Vec3::splat(scale);
+            }
         }
     }
 }
