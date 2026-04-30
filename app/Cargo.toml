@@ -8,6 +8,7 @@ graph_core = { path = "../graph-core" }
 ai_pipeline = { path = "../ai-pipeline" }
 data_sources = { path = "../data-sources" }
 input_sources = { path = "../input-sources" }
+hand-tracking-core = { path = "../hand-tracking-core", features = ["bevy"] }
 bevy = "0.15"
 clap = { version = "4", features = ["derive"] }
 walkdir = "2"

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::gesture_detector::{gesture_display_name, GestureState};
-use crate::hand_tracking::{HandLandmarkResource, PipRect};
+use hand_tracking_core::{HandLandmarkResource, HandOverlayConfig};
 
 /// Skeleton edges connecting 21 hand landmarks.
 /// Index mapping: 0=wrist, 1-4=thumb, 5-8=index, 9-12=middle,
@@ -82,7 +82,7 @@ fn draw_skeleton(
     hand_landmarks: Res<HandLandmarkResource>,
     mut gizmos: Gizmos,
     windows: Query<&Window>,
-    pip_rect: Option<Res<PipRect>>,
+    pip_rect: Option<Res<HandOverlayConfig>>,
 ) {
     let Ok(data) = hand_landmarks.inner.lock() else { return };
     let Some(landmarks) = &data.landmarks else { return };

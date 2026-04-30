@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::gesture_classifier::Gesture;
+use hand_tracking_core::Gesture;
 use crate::gesture_detector::GestureEvent;
 
 // ---------------------------------------------------------------------------

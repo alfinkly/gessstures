@@ -254,6 +254,7 @@ dependencies = [
  "clap",
  "data_sources",
  "graph_core",
+ "hand-tracking-core",
  "image",
  "input_sources",
  "nokhwa",
@@ -2916,6 +2917,13 @@ dependencies = [
  "cfg-if 1.0.4",
  "crunchy",
  "zerocopy",
+]
+
+[[package]]
+name = "hand-tracking-core"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]

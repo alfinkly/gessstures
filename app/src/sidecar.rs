@@ -7,7 +7,8 @@ use std::time::Duration;
 use bevy::prelude::*;
 use serde::Deserialize;
 
-use crate::hand_tracking::{HandLandmark, HandLandmarkData, HandLandmarkResource, UseSidecar};
+use hand_tracking_core::{HandLandmark, HandLandmarkData, HandLandmarkResource};
+use crate::hand_tracking::UseSidecar;
 
 #[derive(Deserialize)]
 struct SidecarOutput {

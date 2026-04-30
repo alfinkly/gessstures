@@ -5,74 +5,19 @@ use bevy::prelude::*;
 
 use crate::camera_capture::CameraResource;
 
-#[derive(Debug, Clone, Copy)]
-pub struct HandLandmark {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-pub struct HandLandmarkData {
-    pub landmarks: Option<Vec<HandLandmark>>,
-    pub hand_count: u32,
-    pub timestamp: std::time::Instant,
-}
-
-impl Default for HandLandmarkData {
-    fn default() -> Self {
-        Self {
-            landmarks: None,
-            hand_count: 0,
-            timestamp: std::time::Instant::now(),
-        }
-    }
-}
-
-#[derive(Resource)]
-pub struct HandLandmarkResource {
-    pub inner: Arc<Mutex<HandLandmarkData>>,
-}
-
-impl HandLandmarkResource {
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(HandLandmarkData::default())),
-        }
-    }
-}
-
-impl Default for HandLandmarkResource {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub use hand_tracking_core::{HandLandmark, HandLandmarkData, HandLandmarkResource};
 
 #[derive(Resource)]
 pub struct UseSidecar;
 
-/// Screen-space rect for Picture-in-Picture overlay (preview mode).
-/// When enabled, the skeleton renders only inside this area.
-#[derive(Resource, Clone, Debug)]
-pub struct PipRect {
-    pub enabled: bool,
-    pub left: f32,
-    pub top: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Default for PipRect {
-    fn default() -> Self {
-        Self { enabled: false, left: 0.0, top: 0.0, width: 0.0, height: 0.0 }
-    }
-}
+pub use hand_tracking_core::HandOverlayConfig;
 
 pub struct HandTrackingPlugin;
 
 impl Plugin for HandTrackingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HandLandmarkResource>()
-            .init_resource::<PipRect>()
+            .init_resource::<HandOverlayConfig>()
             .add_systems(Startup, start_hand_tracking);
     }
 }

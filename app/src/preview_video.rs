@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 use crate::camera_capture::CameraResource;
-use crate::hand_tracking::PipRect;
+use hand_tracking_core::HandOverlayConfig;
 
 #[derive(Component)]
 pub struct PreviewVideoRoot;
@@ -50,7 +50,7 @@ fn update_preview_texture(
     query: Query<&Sprite, With<PreviewVideoRoot>>,
     mut q_transform: Query<&mut Transform, (With<PreviewVideoRoot>, Without<Camera>)>,
     windows: Query<&Window>,
-    mut pip_rect: ResMut<PipRect>,
+    mut pip_rect: ResMut<HandOverlayConfig>,
 ) {
     let camera_res = match camera_res {
         Some(r) => r,
