@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+use hand_tracking_core::Gesture;
+
+use crate::gesture_detector::GestureState;
 
 /// Maps normalized 2D hand cursor [0,1] to 3D world space position on the z=0 graph plane.
 ///
@@ -32,4 +35,37 @@ pub fn map_hand_to_3d(
     }
 
     Some(near + dir * t)
+}
+
+/// Draws a laser line from the camera through the cursor position when a Point
+/// gesture is active. The line is red when pointing into void, green when
+/// hovering a node.
+pub fn draw_laser_system(
+    gesture_state: Res<GestureState>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    interaction: Res<graph_core::InteractionState>,
+    mut gizmos: Gizmos,
+) {
+    if !gesture_state.hand_detected || gesture_state.current_gesture != Gesture::Point {
+        return;
+    }
+
+    let Ok((cam, cam_transform)) = camera_q.get_single() else {
+        return;
+    };
+
+    if let Some(world_pos) = map_hand_to_3d(
+        gesture_state.cursor_x,
+        gesture_state.cursor_y,
+        cam_transform,
+        cam,
+    ) {
+        let camera_pos = cam_transform.translation();
+        let color = if interaction.hovered_node.is_some() {
+            Color::srgb(0.0, 1.0, 0.0)
+        } else {
+            Color::srgb(1.0, 0.0, 0.0)
+        };
+        gizmos.line(camera_pos, world_pos, color);
+    }
 }

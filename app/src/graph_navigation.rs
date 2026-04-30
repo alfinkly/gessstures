@@ -10,6 +10,16 @@ use crate::gesture_detector::GestureState;
 use crate::renderer::GraphNode;
 
 // ---------------------------------------------------------------------------
+// Grabbed node resource
+// ---------------------------------------------------------------------------
+
+/// Tracks which node is currently being grabbed (dragged) by a pinch gesture.
+#[derive(Resource, Default)]
+pub struct GrabbedNode {
+    pub node: Option<NodeIndex>,
+}
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
@@ -17,8 +27,16 @@ pub struct GraphNavigationPlugin;
 
 impl Plugin for GraphNavigationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_mode_text)
-            .add_systems(Update, (handle_graph_actions, update_mode_text));
+        app.init_resource::<GrabbedNode>()
+            .add_systems(Startup, spawn_mode_text)
+            .add_systems(
+                Update,
+                (
+                    handle_graph_actions
+                        .after(crate::gesture_actions::process_gesture_actions),
+                    update_mode_text,
+                ),
+            );
     }
 }
 
@@ -158,7 +176,9 @@ pub(crate) fn handle_graph_actions(
     mut interaction: ResMut<InteractionState>,
     graph: Res<GraphResource>,
     mut camera_cmd: EventWriter<CameraCommand>,
-    _node_q: Query<(&Transform, &GraphNode)>,
+    mut grabbed_node: ResMut<GrabbedNode>,
+    mut node_q: Query<(&mut Transform, &GraphNode)>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     for event in action_events.read() {
         match &event.action {
@@ -199,7 +219,6 @@ pub(crate) fn handle_graph_actions(
                 cursor_y: _,
             } => match interaction.mode {
                 GraphInteractionMode::GraphView => {
-                    // Orbit camera based on hand movement
                     camera_cmd.send(CameraCommand {
                         kind: CameraCommandKind::Orbit {
                             delta_yaw: delta_x * 3.0,
@@ -208,7 +227,6 @@ pub(crate) fn handle_graph_actions(
                     });
                 }
                 GraphInteractionMode::VertexPinned => {
-                    // Navigate through outgoing links
                     if let Some(pinned) = interaction.pinned_node {
                         if let Some(node_data) = graph.graph.node_weight(pinned) {
                             if delta_y.abs() > 0.01 {
@@ -222,47 +240,76 @@ pub(crate) fn handle_graph_actions(
                         }
                     }
                 }
-                GraphInteractionMode::VertexContent => {
-                    // No navigation in content mode
-                }
+                GraphInteractionMode::VertexContent => {}
             },
-            GraphAction::PinVertex => {
+            GraphAction::ReadContent => {
                 match interaction.mode {
                     GraphInteractionMode::GraphView => {
+                        // Point + hold from GraphView: pin the hovered node
+                        // and immediately enter content mode.
                         if let Some(node) = interaction.hovered_node {
                             interaction.pin_vertex(node);
-                            info!("Pinned vertex {:?}", node);
+                            interaction.enter_content();
+                            info!("Entering content mode from GraphView via point hold");
                         }
                     }
                     GraphInteractionMode::VertexPinned => {
-                        // Pinch on a linked vertex → navigate to it
-                        if let Some(node) = interaction.hovered_node {
-                            interaction.navigate_to_linked(node);
-                            info!("Navigated to linked vertex {:?}", node);
-                        }
+                        interaction.enter_content();
+                        info!("Entering content mode");
                     }
-                    GraphInteractionMode::VertexContent => {
-                        // No pinning in content mode
-                    }
-                }
-            }
-            GraphAction::ReadContent => {
-                if interaction.mode == GraphInteractionMode::VertexPinned {
-                    interaction.enter_content();
-                    info!("Entering content mode");
+                    _ => {}
                 }
             }
             GraphAction::ExitPin => match interaction.mode {
                 GraphInteractionMode::VertexPinned => {
-                    interaction.go_back(); // → GraphView
+                    interaction.go_back();
                     info!("Exiting pinned mode to graph view");
                 }
                 GraphInteractionMode::VertexContent => {
-                    interaction.go_back(); // → VertexPinned
+                    interaction.go_back();
                     info!("Exiting content mode to pinned view");
                 }
                 _ => {}
             },
+            GraphAction::GrabNode {
+                delta_x,
+                delta_y,
+                delta_z,
+            } => {
+                // First GrabNode event (zero delta) or continuous drag
+                if grabbed_node.node.is_none() {
+                    // Initial grab – set from hovered node
+                    if let Some(hovered) = interaction.hovered_node {
+                        grabbed_node.node = Some(hovered);
+                        info!("Grabbed node {:?}", hovered);
+                    }
+                } else if let Some(grabbed_idx) = grabbed_node.node {
+                    // Continuous drag: move node in camera-relative space
+                    const GRAB_SENSITIVITY: f32 = 5.0;
+                    if let Ok((_, cam_transform)) = camera_q.get_single() {
+                        let right = cam_transform.right() * *delta_x * GRAB_SENSITIVITY;
+                        let up = cam_transform.up() * *delta_y * GRAB_SENSITIVITY;
+                        let forward = cam_transform.forward() * *delta_z * GRAB_SENSITIVITY;
+                        let movement = right + up + forward;
+
+                        for (mut xform, node) in node_q.iter_mut() {
+                            if node.0 == grabbed_idx {
+                                xform.translation += movement;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            GraphAction::ReleaseNode => {
+                if let Some(released) = grabbed_node.node {
+                    grabbed_node.node = None;
+                    info!("Released node {:?}", released);
+                }
+            }
+            GraphAction::ContextMenu => {
+                info!("Context menu stub: pinch on void (no hovered node)");
+            }
         }
     }
 }

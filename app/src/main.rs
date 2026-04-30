@@ -111,7 +111,14 @@ fn main() {
                         notes_dir: notes.clone(),
                     },
                 ))
-                .add_systems(Update, update_hovered_node)
+                .add_systems(
+                    Update,
+                    (
+                        update_hovered_node,
+                        cursor_mapper::draw_laser_system.after(update_hovered_node),
+                    )
+                        .chain(),
+                )
                 .add_systems(
                     Startup,
                     move |mut events: EventWriter<NewContent>| {
@@ -139,7 +146,7 @@ fn main() {
     }
 }
 
-fn update_hovered_node(
+pub(crate) fn update_hovered_node(
     gesture_state: Res<crate::gesture_detector::GestureState>,
     mut interaction: ResMut<InteractionState>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,

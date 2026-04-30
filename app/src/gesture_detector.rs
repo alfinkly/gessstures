@@ -174,8 +174,16 @@ fn detect_gesture_system(
         gesture_state.hand_detected = true;
         gesture_state.no_hand_frames = 0;
         gesture_state.confidence = result.confidence;
-        gesture_state.cursor_x = result.cursor_x;
-        gesture_state.cursor_y = result.cursor_y;
+
+        // For Point gesture, use index finger tip (landmark[8]) as cursor
+        // instead of palm center for more precise targeting.
+        if result.gesture == Gesture::Point {
+            gesture_state.cursor_x = lm[8].x;
+            gesture_state.cursor_y = lm[8].y;
+        } else {
+            gesture_state.cursor_x = result.cursor_x;
+            gesture_state.cursor_y = result.cursor_y;
+        }
         gesture_state.raw_cursor_x = raw_cursor_x;
         gesture_state.raw_cursor_y = raw_cursor_y;
         gesture_state.delta_x = result.delta_x;

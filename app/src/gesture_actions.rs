@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 use hand_tracking_core::Gesture;
-use crate::gesture_detector::GestureEvent;
+use graph_core::InteractionState;
+use crate::gesture_detector::{GestureEvent, GestureHoldEvent};
+use crate::graph_navigation::GrabbedNode;
 
 // ---------------------------------------------------------------------------
 // Public event types
@@ -31,12 +33,20 @@ pub enum GraphAction {
     Zoom {
         amount: f32,
     },
-    /// Enter vertex-pinning mode (pinch → hold).
-    PinVertex,
     /// Read the content of the pinned vertex (fist).
     ReadContent,
     /// Return from vertex-pinning back to the graph view (open palm).
     ExitPin,
+    /// Drag a grabbed node in 3D space (continuous while pinching).
+    GrabNode {
+        delta_x: f32,
+        delta_y: f32,
+        delta_z: f32,
+    },
+    /// Release a previously grabbed node (fired once on pinch release).
+    ReleaseNode,
+    /// Show a context menu (pinch on void, stub for now).
+    ContextMenu,
 }
 
 /// Bevy event wrapping a single graph action.
@@ -51,7 +61,7 @@ pub struct GraphActionEvent {
 
 /// Tracks the previous gesture and a cooldown timer for discrete actions.
 #[derive(Resource)]
-struct GestureActionState {
+pub(crate) struct GestureActionState {
     prev_gesture: Gesture,
     last_action_time: std::time::Instant,
     cooldown: std::time::Duration,
@@ -61,8 +71,6 @@ impl Default for GestureActionState {
     fn default() -> Self {
         Self {
             prev_gesture: Gesture::Unknown,
-            // Start with an already-expired cooldown so the very first
-            // transition is not accidentally blocked.
             last_action_time: std::time::Instant::now()
                 - std::time::Duration::from_secs(10),
             cooldown: std::time::Duration::from_millis(500),
@@ -80,7 +88,10 @@ impl Plugin for GestureActionPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<GraphActionEvent>()
             .init_resource::<GestureActionState>()
-            .add_systems(Update, process_gesture_actions);
+            .add_systems(
+                Update,
+                process_gesture_actions.after(crate::update_hovered_node),
+            );
     }
 }
 
@@ -88,15 +99,26 @@ impl Plugin for GestureActionPlugin {
 // Core system
 // ---------------------------------------------------------------------------
 
-fn process_gesture_actions(
+pub(crate) fn process_gesture_actions(
     mut gesture_events: EventReader<GestureEvent>,
+    mut gesture_hold_events: EventReader<GestureHoldEvent>,
     mut graph_action_events: EventWriter<GraphActionEvent>,
     mut state: ResMut<GestureActionState>,
+    interaction: Res<InteractionState>,
+    mut grabbed_node: ResMut<GrabbedNode>,
 ) {
     let cooldown = state.cooldown;
 
-    // Zoom sensitivity factor for z-depth changes
     const ZOOM_FACTOR: f32 = 10.0;
+
+    // --- Handle hold events (fired when gesture held for N frames) ---
+    for hold_event in gesture_hold_events.read() {
+        if hold_event.gesture == Gesture::Point {
+            graph_action_events.send(GraphActionEvent {
+                action: GraphAction::ReadContent,
+            });
+        }
+    }
 
     for event in gesture_events.read() {
         // --- Continuous action (always fires, no cooldown) ---
@@ -129,8 +151,20 @@ fn process_gesture_actions(
                     },
                 });
             }
+            Gesture::Pinch => {
+                // Continuous grab update while a node is grabbed
+                if grabbed_node.node.is_some() {
+                    graph_action_events.send(GraphActionEvent {
+                        action: GraphAction::GrabNode {
+                            delta_x: event.delta_x,
+                            delta_y: event.delta_y,
+                            delta_z: event.delta_z,
+                        },
+                    });
+                }
+            }
             _ => {
-                // Fallback: Navigate for backward compat
+                // Fallback: Navigate for backward compat (Point, VSIGN, Unknown, Movement)
                 graph_action_events.send(GraphActionEvent {
                     action: GraphAction::Navigate {
                         delta_x: event.delta_x,
@@ -145,17 +179,28 @@ fn process_gesture_actions(
         // --- Discrete actions: fire only on gesture TRANSITION ---
         let now = std::time::Instant::now();
         if now.duration_since(state.last_action_time) < cooldown {
-            // Still in cooldown — skip discrete-action processing for this
-            // event, but still allow the next iteration to check.
             continue;
         }
 
         if event.gesture != state.prev_gesture {
             match event.gesture {
                 Gesture::Pinch => {
-                    graph_action_events.send(GraphActionEvent {
-                        action: GraphAction::PinVertex,
-                    });
+                    if let Some(hovered) = interaction.hovered_node {
+                        // Grab the hovered node
+                        grabbed_node.node = Some(hovered);
+                        graph_action_events.send(GraphActionEvent {
+                            action: GraphAction::GrabNode {
+                                delta_x: 0.0,
+                                delta_y: 0.0,
+                                delta_z: 0.0,
+                            },
+                        });
+                    } else {
+                        // Context menu on void (stub)
+                        graph_action_events.send(GraphActionEvent {
+                            action: GraphAction::ContextMenu,
+                        });
+                    }
                     state.last_action_time = now;
                 }
                 Gesture::Fist => {
@@ -171,6 +216,16 @@ fn process_gesture_actions(
                     state.last_action_time = now;
                 }
                 _ => {}
+            }
+
+            // Handle leaving Pinch (releasing grab regardless of new gesture)
+            if state.prev_gesture == Gesture::Pinch && event.gesture != Gesture::Pinch {
+                if grabbed_node.node.is_some() {
+                    grabbed_node.node = None;
+                    graph_action_events.send(GraphActionEvent {
+                        action: GraphAction::ReleaseNode,
+                    });
+                }
             }
         }
 
