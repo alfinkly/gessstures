@@ -30,11 +30,10 @@ fn setup_preview_video(
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     let texture_handle = images.add(image);
 
-    // Single Camera2d — renders video sprite + gizmos (from HandRendererPlugin)
     commands.spawn((
         Camera2d,
         Camera {
@@ -43,11 +42,13 @@ fn setup_preview_video(
             ..default()
         },
     ));
+    info!("[DBG] preview_video: Camera2d spawned");
 
     let win_size = windows.get_single().ok();
     let (ww, wh) = win_size
         .map(|w| (w.width(), w.height()))
         .unwrap_or((1280.0, 720.0));
+    info!("[DBG] preview_video: setup, window={}x{}", ww, wh);
 
     commands.spawn((
         Sprite {
@@ -64,6 +65,7 @@ fn setup_preview_video(
         )),
         PreviewVideoRoot,
     ));
+    info!("[DBG] preview_video: Sprite spawned ({}{})", width, height);
 }
 
 fn update_preview_texture(
@@ -73,38 +75,64 @@ fn update_preview_texture(
     windows: Query<&Window>,
     mut q_sprite: Query<&mut Transform, (With<PreviewVideoRoot>, Without<Camera>)>,
 ) {
-    let Some(camera_res) = camera_res else { return };
+    let camera_res = match camera_res {
+        Some(r) => r,
+        None => {
+            static mut COUNT: u32 = 0;
+            unsafe { COUNT += 1; if COUNT % 60 == 0 { info!("[DBG] preview: No CameraResource yet"); } }
+            return;
+        }
+    };
 
     let frame_data = {
         let guard = camera_res.frame.lock().unwrap();
-        guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
+        guard.as_ref().cloned()
     };
 
-    let Ok(sprite) = query.get_single() else { return };
-
-    if let Some((data, w, h)) = frame_data {
-        if let Some(image) = images.get_mut(&sprite.image) {
-            let expected = (w * h * 4) as usize;
-            if image.data.len() == expected {
-                image.data[..expected].copy_from_slice(&data[..expected]);
-            } else {
-                *image = Image::new(
-                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                    TextureDimension::D2,
-                    data,
-                    TextureFormat::Rgba8UnormSrgb,
-                    RenderAssetUsages::MAIN_WORLD,
-                );
-            }
+    let frame = match frame_data {
+        Some(d) => d,
+        None => {
+            static mut COUNT: u32 = 0;
+            unsafe { COUNT += 1; if COUNT % 60 == 0 { info!("[DBG] preview: CameraResource exists but frame is None"); } }
+            return;
         }
+    };
 
-        if let Ok(mut transform) = q_sprite.get_single_mut() {
-            if let Ok(window) = windows.get_single() {
-                let ww = window.width();
-                let wh = window.height();
-                if ww > 0.0 && wh > 0.0 {
-                    transform.scale = Vec3::splat((ww / w as f32).min(wh / h as f32));
-                }
+    let sprite = match query.get_single() {
+        Ok(s) => s,
+        Err(_) => {
+            static mut COUNT: u32 = 0;
+            unsafe { COUNT += 1; if COUNT % 60 == 0 { info!("[DBG] preview: No PreviewVideoRoot Sprite found"); } }
+            return;
+        }
+    };
+
+    if let Some(image) = images.get_mut(&sprite.image) {
+        let expected = (frame.width * frame.height * 4) as usize;
+        if image.data.len() == expected && frame.data.len() >= expected {
+            image.data[..expected].copy_from_slice(&frame.data[..expected]);
+            static mut COPY_COUNT: u32 = 0;
+            unsafe { COPY_COUNT += 1; if COPY_COUNT == 1 {
+                info!("[DBG] preview: First frame copied ({}x{})", frame.width, frame.height);
+            }}
+        } else if frame.data.len() >= expected {
+            *image = Image::new(
+                Extent3d { width: frame.width, height: frame.height, depth_or_array_layers: 1 },
+                TextureDimension::D2,
+                frame.data.clone(),
+                TextureFormat::Rgba8UnormSrgb,
+                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+            );
+            info!("[DBG] preview: Replaced Image asset ({}x{})", frame.width, frame.height);
+        }
+    }
+
+    if let Ok(mut transform) = q_sprite.get_single_mut() {
+        if let Ok(window) = windows.get_single() {
+            let ww = window.width();
+            let wh = window.height();
+            if ww > 0.0 && wh > 0.0 {
+                transform.scale = Vec3::splat((ww / frame.width as f32).min(wh / frame.height as f32));
             }
         }
     }
