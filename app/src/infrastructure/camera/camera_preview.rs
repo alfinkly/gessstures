@@ -94,22 +94,52 @@ fn update_camera_texture(
     let expected = (w * h * 4) as usize;
     if data.len() < expected { return; }
 
-    let new_image = Image::new(
-        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-
-    if let Some(image) = images.get_mut(&sprite.image) {
-        *image = new_image;
-        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            eprintln!("[CAM] First frame COPIED to texture");
+    // Create a test pattern so we can see the sprite even without camera data
+    // Every 60 frames, draw a red/green/blue gradient to confirm sprite renders
+    {
+        static FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let f = FRAME.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if f % 60 < 30 {
+            // Normal: use camera data if available
+            if data.len() >= expected {
+                let new_image = Image::new(
+                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    TextureDimension::D2,
+                    data,
+                    TextureFormat::Rgba8UnormSrgb,
+                    RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+                );
+                if let Some(image) = images.get_mut(&sprite.image) {
+                    *image = new_image;
+                }
+            }
+        } else {
+            // TEST PATTERN: alternating red/blue/green to visually confirm sprite works
+            let mut test_data = vec![0u8; expected];
+            let stripe = (h as f32 * 0.3) as usize;
+            for y in 0..h as usize {
+                for x in 0..w as usize {
+                    let i = (y * w as usize + x) * 4;
+                    if y < stripe {
+                        test_data[i..i+4].copy_from_slice(&[255, 0, 0, 255]);      // red
+                    } else if y < stripe * 2 {
+                        test_data[i..i+4].copy_from_slice(&[0, 255, 0, 255]);      // green
+                    } else {
+                        test_data[i..i+4].copy_from_slice(&[0, 0, 255, 255]);      // blue
+                    }
+                }
+            }
+            let test_image = Image::new(
+                Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                TextureDimension::D2,
+                test_data,
+                TextureFormat::Rgba8UnormSrgb,
+                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+            );
+            if let Some(image) = images.get_mut(&sprite.image) {
+                *image = test_image;
+            }
         }
-    } else {
-        eprintln!("[CAM] Image handle not found in Assets!");
     }
 
     if let Ok(window) = windows.get_single() {
