@@ -28,7 +28,8 @@ use labels::NodeLabelsPlugin;
 use infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use interface::plugins::hand_tracking_plugin::HandTrackingPlugin;
 use interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
-use interface::plugins::body_overlay_plugin::BodyOverlayPlugin;
+use interface::plugins::body_overlay_plugin::BodyTilePlugin;
+use infrastructure::camera::camera_preview::CameraViewPlugin;
 use interface::plugins::pose_skeleton_plugin::PoseSkeletonPlugin;
 use infrastructure::body::person_tracker::BodyTrackingPlugin;
 use vertex_highlight::VertexHighlightPlugin;
@@ -110,7 +111,7 @@ fn main() {
                     PreviewVideoPlugin,
                     VertexHighlightPlugin,
                     SkeletonRendererPlugin,
-                    BodyOverlayPlugin,
+                    BodyTilePlugin,
                     GestureDetectorPlugin,
                     GestureActionPlugin,
                     GraphNavigationPlugin,
@@ -150,12 +151,13 @@ fn main() {
         Commands::Bodies => {
             let mut app = App::new();
             app.add_plugins(DefaultPlugins)
-               .add_plugins((
-                   CameraCapturePlugin,
-                   BodyTrackingPlugin,
-                   BodyOverlayPlugin,
-                   PoseSkeletonPlugin,
-               ));
+                .add_plugins((
+                    CameraCapturePlugin,
+                    CameraViewPlugin,
+                    BodyTrackingPlugin,
+                    BodyTilePlugin,
+                    PoseSkeletonPlugin,
+                ));
             app.run();
         }
         Commands::Voice => {

@@ -3,7 +3,7 @@ use crate::infrastructure::body::person_tracker::BodyTrackingPlugin;
 use crate::infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use crate::infrastructure::camera::overlay_adapter::PreviewVideoPlugin;
 use crate::infrastructure::ml::mediapipe_sidecar::SidecarPlugin;
-use crate::interface::plugins::body_overlay_plugin::BodyOverlayPlugin;
+use crate::interface::plugins::body_overlay_plugin::BodyTilePlugin;
 use crate::interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
 use hand_tracking_core::{HandLandmarkResource, HandOverlayConfig};
 
@@ -27,7 +27,7 @@ impl Plugin for PreviewPlugin {
 
         app.add_plugins((
             SkeletonRendererPlugin,
-            BodyOverlayPlugin,
+            BodyTilePlugin,
         ));
     }
 }

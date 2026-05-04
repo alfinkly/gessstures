@@ -1,13 +1,7 @@
-use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use crate::infrastructure::camera::capture_adapter::CameraResource;
 use crate::infrastructure::body::person_tracker::PersonTrackerResource;
+use crate::infrastructure::camera::camera_preview::CameraViewTexture;
 use hand_tracking_core::config::{CAMERA_WIDTH, CAMERA_HEIGHT};
-
-/// Marker component for the full-frame background sprite.
-#[derive(Component)]
-pub struct BodyOverlayRoot;
 
 /// Marks a sprite as the tile for a person, storing index and screen rect for skeleton drawing.
 #[derive(Component)]
@@ -15,10 +9,6 @@ pub struct PersonTile {
     pub index: usize,
     pub screen_rect: Rect,
 }
-
-/// Holds the shared texture handle used by both background and tile sprites.
-#[derive(Resource)]
-pub struct CameraTexture(pub Handle<Image>);
 
 /// Screen-space layout info for a single tile.
 pub struct TileInfo {
@@ -28,132 +18,18 @@ pub struct TileInfo {
     pub h: f32,
 }
 
-pub struct BodyOverlayPlugin;
+pub struct BodyTilePlugin;
 
-impl Plugin for BodyOverlayPlugin {
+impl Plugin for BodyTilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_body_overlay)
-            .add_systems(Update, (update_fullscreen_texture, update_person_tiles));
+        app.add_systems(Update, update_person_tiles);
     }
-}
-
-fn setup_body_overlay(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    windows: Query<&Window>,
-    camera_q: Query<&Camera, With<Camera2d>>,
-) {
-    // Ensure a Camera2d exists for sprite rendering (standalone mode without SkeletonRendererPlugin)
-    if camera_q.is_empty() {
-        commands.spawn((
-            Camera2d,
-            Camera {
-                order: 1,
-                clear_color: ClearColorConfig::None,
-                ..default()
-            },
-        ));
-    }
-
-    let width = CAMERA_WIDTH;
-    let height = CAMERA_HEIGHT;
-    let data = vec![0u8; (width * height * 4) as usize];
-
-    let image = Image::new(
-        Extent3d { width, height, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-    let texture_handle = images.add(image);
-
-    commands.insert_resource(CameraTexture(texture_handle.clone()));
-
-    let (ww, wh) = windows
-        .get_single()
-        .map(|w| (w.width(), w.height()))
-        .unwrap_or((1280.0, 720.0));
-    let scale = fit_scale(ww, wh);
-
-    commands.spawn((
-        Sprite {
-            image: texture_handle,
-            rect: None,
-            custom_size: Some(Vec2::new(width as f32, height as f32)),
-            ..default()
-        },
-        Transform::from_scale(scale),
-        GlobalTransform::default(),
-        BodyOverlayRoot,
-    ));
-}
-
-fn update_fullscreen_texture(
-    camera_res: Option<Res<CameraResource>>,
-    mut images: ResMut<Assets<Image>>,
-    query: Query<&Sprite, With<BodyOverlayRoot>>,
-    mut q_transform: Query<&mut Transform, (With<BodyOverlayRoot>, Without<Camera>)>,
-    windows: Query<&Window>,
-) {
-    let camera_res = match camera_res {
-        Some(r) => r,
-        None => return,
-    };
-
-    let frame_data = {
-        let guard = camera_res.frame.lock().unwrap();
-        guard.as_ref().cloned()
-    };
-
-    let frame = match frame_data {
-        Some(d) => d,
-        None => return,
-    };
-
-    let Ok(sprite) = query.get_single() else { return };
-
-    if let Some(image) = images.get_mut(&sprite.image) {
-        let expected = (frame.width * frame.height * 4) as usize;
-        if image.data.len() == expected && frame.data.len() >= expected {
-            image.data[..expected].copy_from_slice(&frame.data[..expected]);
-        } else if frame.data.len() >= expected {
-            *image = Image::new(
-                Extent3d { width: frame.width, height: frame.height, depth_or_array_layers: 1 },
-                TextureDimension::D2,
-                frame.data,
-                TextureFormat::Rgba8UnormSrgb,
-                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-            );
-        }
-    }
-
-    if let Ok(window) = windows.get_single() {
-        let ww = window.width();
-        let wh = window.height();
-        if ww > 0.0 && wh > 0.0 {
-            if let Ok(mut transform) = q_transform.get_single_mut() {
-                transform.scale = fit_scale(ww, wh);
-            }
-        }
-    }
-}
-
-fn fit_scale(ww: f32, wh: f32) -> Vec3 {
-    let img_aspect = CAMERA_WIDTH as f32 / CAMERA_HEIGHT as f32;
-    let win_aspect = ww / wh;
-    let scale = if win_aspect > img_aspect {
-        wh / CAMERA_HEIGHT as f32
-    } else {
-        ww / CAMERA_WIDTH as f32
-    };
-    Vec3::splat(scale)
 }
 
 fn update_person_tiles(
     mut commands: Commands,
     person_tracker: Res<PersonTrackerResource>,
-    camera_texture: Res<CameraTexture>,
+    camera_texture: Res<CameraViewTexture>,
     mut tile_query: Query<(Entity, &mut Sprite, &mut Transform, &mut PersonTile)>,
     windows: Query<&Window>,
 ) {
