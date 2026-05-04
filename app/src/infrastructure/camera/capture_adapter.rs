@@ -77,8 +77,16 @@ fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<At
                                 timestamp: std::time::Instant::now(),
                             };
 
+                            {
+                                static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                                if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                                    eprintln!("[CAPTURE DBG] First frame WRITTEN to shared_frame ({}x{})", w, h);
+                                }
+                            }
                             if let Ok(mut guard) = shared_frame.lock() {
                                 *guard = Some(new_frame);
+                            } else {
+                                eprintln!("[CAPTURE DBG] FAILED to lock shared_frame (poisoned?)");
                             }
                         }
                         Err(e) => {
