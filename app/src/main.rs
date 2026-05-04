@@ -28,6 +28,8 @@ use labels::NodeLabelsPlugin;
 use infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use interface::plugins::hand_tracking_plugin::HandTrackingPlugin;
 use interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
+use interface::plugins::body_overlay_plugin::BodyOverlayPlugin;
+use infrastructure::body::person_tracker::BodyTrackingPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
 use gesture_actions::GestureActionPlugin;
@@ -98,12 +100,14 @@ fn main() {
                     NodeLabelsPlugin,
                     CameraCapturePlugin,
                     HandTrackingPlugin,
+                    BodyTrackingPlugin,
                 ))
                 .add_plugins((
                     SidecarPlugin,
                     PreviewVideoPlugin,
                     VertexHighlightPlugin,
                     SkeletonRendererPlugin,
+                    BodyOverlayPlugin,
                     GestureDetectorPlugin,
                     GestureActionPlugin,
                     GraphNavigationPlugin,
