@@ -15,6 +15,13 @@ pub struct PersonBbox {
     pub h: f32,
 }
 
+/// Full data for a single detected person, including bounding box and optional pose keypoints.
+#[derive(Debug, Clone)]
+pub struct PersonData {
+    pub bbox: PersonBbox,
+    pub keypoints: Option<Vec<[f32; 3]>>,
+}
+
 /// Full JSON output from the Python sidecar
 #[derive(Debug, Clone, Deserialize)]
 struct SidecarPersonOutput {
@@ -34,7 +41,7 @@ struct PersonEntry {
 /// Bevy resource holding detected person data for the current frame
 #[derive(Resource, Default)]
 pub struct PersonTrackerResource {
-    pub persons: Vec<PersonBbox>,
+    pub persons: Vec<PersonData>,
     pub person_count: u32,
     pub timestamp: f64,
 }
@@ -137,11 +144,14 @@ fn start_body_tracker(mut commands: Commands) {
                             state.persons = output
                                 .persons
                                 .iter()
-                                .map(|p| PersonBbox {
-                                    cx: p.bbox[0],
-                                    cy: p.bbox[1],
-                                    w: p.bbox[2],
-                                    h: p.bbox[3],
+                                .map(|p| PersonData {
+                                    bbox: PersonBbox {
+                                        cx: p.bbox[0],
+                                        cy: p.bbox[1],
+                                        w: p.bbox[2],
+                                        h: p.bbox[3],
+                                    },
+                                    keypoints: p.keypoints.clone(),
                                 })
                                 .collect();
                         }

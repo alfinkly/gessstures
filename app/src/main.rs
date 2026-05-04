@@ -29,6 +29,7 @@ use infrastructure::camera::capture_adapter::CameraCapturePlugin;
 use interface::plugins::hand_tracking_plugin::HandTrackingPlugin;
 use interface::plugins::skeleton_renderer_plugin::SkeletonRendererPlugin;
 use interface::plugins::body_overlay_plugin::BodyOverlayPlugin;
+use interface::plugins::pose_skeleton_plugin::PoseSkeletonPlugin;
 use infrastructure::body::person_tracker::BodyTrackingPlugin;
 use vertex_highlight::VertexHighlightPlugin;
 use gesture_detector::GestureDetectorPlugin;
@@ -73,6 +74,8 @@ pub enum Commands {
         #[arg(short, long, default_value_t = 0)]
         camera: u32,
     },
+    /// Body tracking only — detect people, show fitted tiles with pose skeletons
+    Bodies,
     /// Voice-controlled mode (future)
     Voice,
 }
@@ -142,6 +145,17 @@ fn main() {
             let mut app = App::new();
             app.add_plugins(DefaultPlugins)
                .add_plugins(PreviewPlugin);
+            app.run();
+        }
+        Commands::Bodies => {
+            let mut app = App::new();
+            app.add_plugins(DefaultPlugins)
+               .add_plugins((
+                   CameraCapturePlugin,
+                   BodyTrackingPlugin,
+                   BodyOverlayPlugin,
+                   PoseSkeletonPlugin,
+               ));
             app.run();
         }
         Commands::Voice => {

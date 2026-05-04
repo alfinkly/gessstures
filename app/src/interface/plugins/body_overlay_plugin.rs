@@ -9,9 +9,12 @@ use hand_tracking_core::config::{CAMERA_WIDTH, CAMERA_HEIGHT};
 #[derive(Component)]
 pub struct BodyOverlayRoot;
 
-/// Marks a sprite as the tile for person at index `0`.
+/// Marks a sprite as the tile for a person, storing index and screen rect for skeleton drawing.
 #[derive(Component)]
-pub struct PersonTile(pub usize);
+pub struct PersonTile {
+    pub index: usize,
+    pub screen_rect: Rect,
+}
 
 /// Holds the shared texture handle used by both background and tile sprites.
 #[derive(Resource)]
@@ -38,7 +41,20 @@ fn setup_body_overlay(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     windows: Query<&Window>,
+    camera_q: Query<&Camera, With<Camera2d>>,
 ) {
+    // Ensure a Camera2d exists for sprite rendering (standalone mode without SkeletonRendererPlugin)
+    if camera_q.is_empty() {
+        commands.spawn((
+            Camera2d,
+            Camera {
+                order: 1,
+                clear_color: ClearColorConfig::None,
+                ..default()
+            },
+        ));
+    }
+
     let width = CAMERA_WIDTH;
     let height = CAMERA_HEIGHT;
     let data = vec![0u8; (width * height * 4) as usize];
@@ -138,7 +154,7 @@ fn update_person_tiles(
     mut commands: Commands,
     person_tracker: Res<PersonTrackerResource>,
     camera_texture: Res<CameraTexture>,
-    mut tile_query: Query<(Entity, &mut Sprite, &mut Transform, &PersonTile)>,
+    mut tile_query: Query<(Entity, &mut Sprite, &mut Transform, &mut PersonTile)>,
     windows: Query<&Window>,
 ) {
     let Ok(window) = windows.get_single() else { return };
@@ -153,26 +169,26 @@ fn update_person_tiles(
     let mut found = vec![false; layout.len()];
     let mut to_despawn = Vec::new();
 
-    for (entity, mut sprite, mut transform, pt) in tile_query.iter_mut() {
-        if pt.0 >= layout.len() {
+    for (entity, mut sprite, mut transform, mut pt) in tile_query.iter_mut() {
+        if pt.index >= layout.len() {
             to_despawn.push(entity);
             continue;
         }
 
-        found[pt.0] = true;
-        let info = &layout[pt.0];
+        found[pt.index] = true;
+        let info = &layout[pt.index];
 
-        sprite.rect = person_tracker.persons.get(pt.0).map(|bbox| {
+        sprite.rect = person_tracker.persons.get(pt.index).map(|p| {
             let tex_w = CAMERA_WIDTH as f32;
             let tex_h = CAMERA_HEIGHT as f32;
             Rect {
                 min: Vec2::new(
-                    (bbox.cx - bbox.w / 2.0) * tex_w,
-                    (bbox.cy - bbox.h / 2.0) * tex_h,
+                    (p.bbox.cx - p.bbox.w / 2.0) * tex_w,
+                    (p.bbox.cy - p.bbox.h / 2.0) * tex_h,
                 ),
                 max: Vec2::new(
-                    (bbox.cx + bbox.w / 2.0) * tex_w,
-                    (bbox.cy + bbox.h / 2.0) * tex_h,
+                    (p.bbox.cx + p.bbox.w / 2.0) * tex_w,
+                    (p.bbox.cy + p.bbox.h / 2.0) * tex_h,
                 ),
             }
         });
@@ -182,6 +198,11 @@ fn update_person_tiles(
         let screen_cx = info.x + info.w / 2.0;
         let screen_cy = info.y + info.h / 2.0;
         transform.translation = Vec3::new(screen_cx - ww / 2.0, wh / 2.0 - screen_cy, 1.0);
+
+        pt.screen_rect = Rect {
+            min: Vec2::new(info.x, info.y),
+            max: Vec2::new(info.x + info.w, info.y + info.h),
+        };
     }
 
     for entity in to_despawn {
@@ -193,23 +214,28 @@ fn update_person_tiles(
             continue;
         }
 
-        let rect = person_tracker.persons.get(i).map(|bbox| {
+        let rect = person_tracker.persons.get(i).map(|p| {
             let tex_w = CAMERA_WIDTH as f32;
             let tex_h = CAMERA_HEIGHT as f32;
             Rect {
                 min: Vec2::new(
-                    (bbox.cx - bbox.w / 2.0) * tex_w,
-                    (bbox.cy - bbox.h / 2.0) * tex_h,
+                    (p.bbox.cx - p.bbox.w / 2.0) * tex_w,
+                    (p.bbox.cy - p.bbox.h / 2.0) * tex_h,
                 ),
                 max: Vec2::new(
-                    (bbox.cx + bbox.w / 2.0) * tex_w,
-                    (bbox.cy + bbox.h / 2.0) * tex_h,
+                    (p.bbox.cx + p.bbox.w / 2.0) * tex_w,
+                    (p.bbox.cy + p.bbox.h / 2.0) * tex_h,
                 ),
             }
         });
 
         let screen_cx = info.x + info.w / 2.0;
         let screen_cy = info.y + info.h / 2.0;
+
+        let screen_rect = Rect {
+            min: Vec2::new(info.x, info.y),
+            max: Vec2::new(info.x + info.w, info.y + info.h),
+        };
 
         commands.spawn((
             Sprite {
@@ -220,7 +246,10 @@ fn update_person_tiles(
             },
             Transform::from_xyz(screen_cx - ww / 2.0, wh / 2.0 - screen_cy, 1.0),
             GlobalTransform::default(),
-            PersonTile(i),
+            PersonTile {
+                index: i,
+                screen_rect,
+            },
         ));
     }
 }
