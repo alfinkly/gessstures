@@ -95,7 +95,7 @@ fn update_camera_texture(
     if data.len() < expected { return; }
 
     let new_image = Image::new(
-        Extent3d { width: fw, height: fh, depth_or_array_layers: 1 },
+        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
