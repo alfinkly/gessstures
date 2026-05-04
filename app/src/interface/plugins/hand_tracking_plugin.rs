@@ -47,7 +47,7 @@ fn start_hand_tracking(
 }
 
 fn detection_loop(
-    camera_frame: Arc<Mutex<Option<CameraFrame>>>,
+    camera_frame: Arc<Mutex<CameraFrame>>,
     is_active: Arc<AtomicBool>,
     output: Arc<Mutex<HandLandmarkData>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -58,22 +58,18 @@ fn detection_loop(
         }
 
         let frame = {
-            let mut guard = camera_frame.lock().unwrap();
-            guard.as_ref().cloned()
+            let guard = camera_frame.lock().unwrap();
+            guard.clone()
         };
 
-        if let Some(frame) = frame {
-            let start = std::time::Instant::now();
-            let data = detect_hand_cv(&frame);
-            if let Ok(mut guard) = output.lock() {
-                *guard = data;
-            }
-            let elapsed = start.elapsed();
-            if elapsed < std::time::Duration::from_millis(33) {
-                std::thread::sleep(std::time::Duration::from_millis(33) - elapsed);
-            }
-        } else {
-            std::thread::sleep(std::time::Duration::from_millis(16));
+        let start = std::time::Instant::now();
+        let data = detect_hand_cv(&frame);
+        if let Ok(mut guard) = output.lock() {
+            *guard = data;
+        }
+        let elapsed = start.elapsed();
+        if elapsed < std::time::Duration::from_millis(33) {
+            std::thread::sleep(std::time::Duration::from_millis(33) - elapsed);
         }
     }
 }

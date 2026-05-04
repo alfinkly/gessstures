@@ -57,14 +57,9 @@ fn update_preview_texture(
         None => return,
     };
 
-    let frame_data = {
+    let frame = {
         let guard = camera_res.frame.lock().unwrap();
-        guard.as_ref().cloned()
-    };
-
-    let frame = match frame_data {
-        Some(d) => d,
-        None => return,
+        guard.clone()
     };
 
     let Ok(sprite) = query.get_single() else { return };

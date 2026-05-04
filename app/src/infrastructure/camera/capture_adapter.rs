@@ -14,25 +14,24 @@ pub struct CameraFrame {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
-    pub format: FrameFormat,
-    pub timestamp: std::time::Instant,
 }
 
 #[derive(Resource)]
 pub struct CameraResource {
-    pub frame: Arc<Mutex<Option<CameraFrame>>>,
+    pub frame: Arc<Mutex<CameraFrame>>,
     pub is_active: Arc<AtomicBool>,
 }
 
 impl CameraResource {
-    fn new() -> (Self, Arc<Mutex<Option<CameraFrame>>>, Arc<AtomicBool>) {
-        let frame = Arc::new(Mutex::new(None));
-        let is_active = Arc::new(AtomicBool::new(false));
-        let res = Self {
-            frame: frame.clone(),
-            is_active: is_active.clone(),
-        };
-        (res, frame, is_active)
+    fn new() -> Self {
+        Self {
+            frame: Arc::new(Mutex::new(CameraFrame {
+                data: vec![128u8; (640 * 480 * 4) as usize],
+                width: 640,
+                height: 480,
+            })),
+            is_active: Arc::new(AtomicBool::new(false)),
+        }
     }
 }
 
@@ -40,7 +39,7 @@ pub struct CameraCapturePlugin;
 
 impl Plugin for CameraCapturePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CameraResource::new().0)
+        app.insert_resource(CameraResource::new())
             .add_systems(Startup, start_capture);
 
         fn start_capture(mut res: ResMut<CameraResource>) {
@@ -52,7 +51,7 @@ impl Plugin for CameraCapturePlugin {
     }
 }
 
-fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<AtomicBool>) {
+fn capture_loop(shared_frame: Arc<Mutex<CameraFrame>>, is_active: Arc<AtomicBool>) {
     loop {
         match open_camera() {
             Ok(mut camera) => {
@@ -65,28 +64,13 @@ fn capture_loop(shared_frame: Arc<Mutex<Option<CameraFrame>>>, is_active: Arc<At
                             let raw = frame.buffer().to_vec();
                             let w = frame.resolution().width();
                             let h = frame.resolution().height();
-                            let src_fmt = frame.source_frame_format();
 
-                            let data = frame_to_rgba(&raw, w, h, src_fmt);
+                            let data = frame_to_rgba(&raw, w, h, frame.source_frame_format());
 
-                            let new_frame = CameraFrame {
-                                data,
-                                width: w,
-                                height: h,
-                                format: src_fmt,
-                                timestamp: std::time::Instant::now(),
-                            };
-
-                            {
-                                static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-                                if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                                    eprintln!("[CAPTURE DBG] First frame WRITTEN to shared_frame ({}x{})", w, h);
-                                }
-                            }
                             if let Ok(mut guard) = shared_frame.lock() {
-                                *guard = Some(new_frame);
-                            } else {
-                                eprintln!("[CAPTURE DBG] FAILED to lock shared_frame (poisoned?)");
+                                guard.data = data;
+                                guard.width = w;
+                                guard.height = h;
                             }
                         }
                         Err(e) => {
