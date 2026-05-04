@@ -11,6 +11,28 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 
+def _read_frame():
+    """Read one frame: WIDTH HEIGHT\\n + raw RGBA bytes from binary stdin."""
+    buf = sys.stdin.buffer
+    dims = b""
+    while True:
+        ch = buf.read(1)
+        if not ch:
+            return None
+        if ch == b"\n":
+            break
+        dims += ch
+    parts = dims.split()
+    if len(parts) < 2:
+        return _read_frame()
+    w, h = int(parts[0]), int(parts[1])
+    frame_size = w * h * 4
+    raw_data = buf.read(frame_size)
+    if len(raw_data) < frame_size:
+        return None
+    return w, h, raw_data
+
+
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     model_path = os.path.normpath(os.path.join(script_dir, "..", "models", "pose_landmarker_full.task"))
@@ -27,15 +49,10 @@ def main():
 
     try:
         while True:
-            dims_line = sys.stdin.readline()
-            if not dims_line:
+            frame = _read_frame()
+            if frame is None:
                 break
-            parts = dims_line.strip().split()
-            if len(parts) < 2:
-                continue
-            width, height = int(parts[0]), int(parts[1])
-            frame_size = width * height * 4
-            raw_data = sys.stdin.buffer.read(frame_size)
+            width, height, raw_data = frame
             if len(raw_data) < frame_size:
                 break
 
