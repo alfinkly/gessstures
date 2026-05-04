@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use serde::Deserialize;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 
-use crate::infrastructure::camera::capture_adapter::CameraResource;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -80,13 +79,11 @@ impl Drop for BodyTrackerProcess {
 
 fn start_body_tracker(
     mut commands: Commands,
-    camera_resource: Res<CameraResource>,
 ) {
     let latest: Arc<Mutex<PersonTrackerResource>> =
         Arc::new(Mutex::new(PersonTrackerResource::default()));
     let child_handle: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let shutdown = Arc::new(AtomicBool::new(false));
-    let camera_frame = camera_resource.frame.clone();
 
     let latest_clone = latest.clone();
     let child_clone = child_handle.clone();
@@ -103,7 +100,6 @@ fn start_body_tracker(
 
                 let mut child = match Command::new("python3")
                     .args(["-u", "app/mediapipe_body.py"])
-                    .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::inherit())
                     .spawn()
@@ -112,16 +108,6 @@ fn start_body_tracker(
                     Err(e) => {
                         error!("Body tracker: failed to spawn python3: {}", e);
                         std::thread::sleep(std::time::Duration::from_secs(2));
-                        continue;
-                    }
-                };
-
-                let mut child_stdin = match child.stdin.take() {
-                    Some(s) => s,
-                    None => {
-                        error!("Body tracker: no stdin from child process");
-                        let _ = child.kill();
-                        let _ = child.wait();
                         continue;
                     }
                 };
@@ -184,26 +170,6 @@ fn start_body_tracker(
                     }
                 });
 
-                while !shutdown_clone.load(Ordering::SeqCst) {
-                    let frame = {
-                        let guard = camera_frame.lock().unwrap();
-                        guard.as_ref().map(|f| (f.width, f.height, f.data.clone()))
-                    };
-
-                    if let Some((w, h, data)) = frame {
-                        if writeln!(child_stdin, "{} {}", w, h).is_err() {
-                            break;
-                        }
-                        if child_stdin.write_all(&data).is_err() {
-                            break;
-                        }
-                        if child_stdin.flush().is_err() {
-                            break;
-                        }
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_millis(16));
-                    }
-                }
             }
         })
         .expect("failed to spawn body-tracker thread");
