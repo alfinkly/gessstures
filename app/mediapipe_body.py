@@ -1,14 +1,10 @@
-"""
-MediaPipe Pose Landmarker Sidecar — detects people in camera frame.
-Outputs JSON bounding boxes to stdout for the Rust app to consume.
-"""
-
 import json
 import time
 import sys
 import os
 
 import cv2
+import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -19,16 +15,8 @@ def main():
     model_path = os.path.normpath(os.path.join(script_dir, "..", "models", "pose_landmarker_full.task"))
 
     if not os.path.exists(model_path):
-        print(json.dumps({"error": f"Model not found: {model_path}", "timestamp": time.time()}), flush=True)
+        print(json.dumps({"error": f"Model not found: {model_path}"}), flush=True)
         sys.exit(1)
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print(json.dumps({"error": "Cannot open camera", "timestamp": time.time()}), flush=True)
-        sys.exit(1)
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     base_options = python.BaseOptions(model_asset_path=model_path)
     options = vision.PoseLandmarkerOptions(
@@ -42,12 +30,23 @@ def main():
 
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                time.sleep(0.1)
+            dims_line = sys.stdin.readline()
+            if not dims_line:
+                break
+            dims_line = dims_line.strip()
+            parts = dims_line.split()
+            if len(parts) < 2:
                 continue
+            width, height = int(parts[0]), int(parts[1])
 
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_size = width * height * 4
+            raw_data = sys.stdin.buffer.read(frame_size)
+            if len(raw_data) < frame_size:
+                break
+
+            img_array = np.frombuffer(raw_data, dtype=np.uint8).reshape((height, width, 4))
+            frame_rgb = img_array[:, :, :3].copy()
+
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
             detection_result = landmarker.detect(mp_image)
@@ -59,18 +58,15 @@ def main():
                     ys = [lm.y for lm in pose]
                     min_x, max_x = min(xs), max(xs)
                     min_y, max_y = min(ys), max(ys)
+                    margin = 0.1
                     cx = (min_x + max_x) / 2.0
                     cy = (min_y + max_y) / 2.0
-                    w = max_x - min_x
-                    h = max_y - min_y
-                    margin = 0.1
-                    w_margin = w * (1.0 + 2.0 * margin)
-                    h_margin = h * (1.0 + 2.0 * margin)
+                    w = (max_x - min_x) * (1.0 + 2.0 * margin)
+                    h = (max_y - min_y) * (1.0 + 2.0 * margin)
                     persons.append({
-                        "bbox": [cx, cy, w_margin, h_margin],
+                        "bbox": [cx, cy, w, h],
                         "keypoints": [[lm.x, lm.y, lm.z] for lm in pose],
                     })
-
                 output = {
                     "person_count": len(persons),
                     "persons": persons,
@@ -83,8 +79,9 @@ def main():
 
     except (KeyboardInterrupt, SystemExit):
         pass
+    except Exception as e:
+        print(json.dumps({"error": str(e), "person_count": 0, "persons": []}), flush=True)
     finally:
-        cap.release()
         landmarker.close()
 
 
