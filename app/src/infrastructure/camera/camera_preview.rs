@@ -79,7 +79,10 @@ fn update_camera_texture(
 ) {
     let camera_res = match camera_res {
         Some(r) => r,
-        None => return,
+        None => {
+            eprintln!("[CAM DBG] No CameraResource at all");
+            return;
+        }
     };
 
     let frame_data = {
@@ -87,59 +90,64 @@ fn update_camera_texture(
         guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
     };
 
-    let Some((data, w, h)) = frame_data else { return };
-
-    let Ok((mut transform, sprite)) = query.get_single_mut() else { return };
+    let Some((data, w, h)) = frame_data else {
+        eprintln!("[CAM DBG] CameraResource exists but frame is None (not ready yet)");
+        return;
+    };
 
     let expected = (w * h * 4) as usize;
-    if data.len() < expected { return; }
+    static FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let f = FRAME.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let use_test_pattern = f % 60 >= 30;
 
-    // Create a test pattern so we can see the sprite even without camera data
-    // Every 60 frames, draw a red/green/blue gradient to confirm sprite renders
-    {
-        static FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let f = FRAME.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if f % 60 < 30 {
-            // Normal: use camera data if available
-            if data.len() >= expected {
-                let new_image = Image::new(
-                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                    TextureDimension::D2,
-                    data,
-                    TextureFormat::Rgba8UnormSrgb,
-                    RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-                );
-                if let Some(image) = images.get_mut(&sprite.image) {
-                    *image = new_image;
+    let pixels: Vec<u8> = if use_test_pattern {
+        let mut test_data = vec![0u8; expected];
+        let stripe = (h as f32 * 0.333) as usize;
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                if y < stripe {
+                    test_data[i..i+4].copy_from_slice(&[255, 0, 0, 255]);
+                } else if y < stripe * 2 {
+                    test_data[i..i+4].copy_from_slice(&[0, 255, 0, 255]);
+                } else {
+                    test_data[i..i+4].copy_from_slice(&[0, 0, 255, 255]);
                 }
-            }
-        } else {
-            // TEST PATTERN: alternating red/blue/green to visually confirm sprite works
-            let mut test_data = vec![0u8; expected];
-            let stripe = (h as f32 * 0.3) as usize;
-            for y in 0..h as usize {
-                for x in 0..w as usize {
-                    let i = (y * w as usize + x) * 4;
-                    if y < stripe {
-                        test_data[i..i+4].copy_from_slice(&[255, 0, 0, 255]);      // red
-                    } else if y < stripe * 2 {
-                        test_data[i..i+4].copy_from_slice(&[0, 255, 0, 255]);      // green
-                    } else {
-                        test_data[i..i+4].copy_from_slice(&[0, 0, 255, 255]);      // blue
-                    }
-                }
-            }
-            let test_image = Image::new(
-                Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                TextureDimension::D2,
-                test_data,
-                TextureFormat::Rgba8UnormSrgb,
-                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-            );
-            if let Some(image) = images.get_mut(&sprite.image) {
-                *image = test_image;
             }
         }
+        eprintln!("[CAM DBG] Using TEST PATTERN (f={})", FRAME.load(std::sync::atomic::Ordering::Relaxed));
+        test_data
+    } else {
+        if data.len() >= expected {
+            data
+        } else {
+            eprintln!("[CAM DBG] Camera data too short: {} < {}", data.len(), expected);
+            return;
+        }
+    };
+
+    let new_image = Image::new(
+        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        pixels,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+
+    eprintln!("[CAM DBG] About to query sprite...");
+
+    let Ok((mut transform, sprite)) = query.get_single_mut() else {
+        eprintln!("[CAM DBG] FAILED to find CameraBackground sprite in query");
+        return;
+    };
+
+    eprintln!("[CAM DBG] Found sprite, about to update image...");
+
+    if let Some(image) = images.get_mut(&sprite.image) {
+        *image = new_image;
+        eprintln!("[CAM DBG] Image UPDATED successfully (handle={:?})", sprite.image.id());
+    } else {
+        eprintln!("[CAM DBG] FAILED: images.get_mut returned None for handle {:?}", sprite.image.id());
     }
 
     if let Ok(window) = windows.get_single() {
