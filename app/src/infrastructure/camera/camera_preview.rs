@@ -79,13 +79,7 @@ fn update_camera_texture(
 ) {
     let camera_res = match camera_res {
         Some(r) => r,
-        None => {
-            static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-            if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                info!("[CAM] No CameraResource yet");
-            }
-            return;
-        }
+        None => return,
     };
 
     let frame_data = {
@@ -95,19 +89,13 @@ fn update_camera_texture(
 
     let Some((data, w, h)) = frame_data else { return };
 
-    let Ok((mut transform, sprite)) = query.get_single_mut() else {
-        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            info!("[CAM] No CameraBackground sprite found");
-        }
-        return;
-    };
+    let Ok((mut transform, sprite)) = query.get_single_mut() else { return };
 
     let expected = (w * h * 4) as usize;
     if data.len() < expected { return; }
 
     let new_image = Image::new(
-        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        Extent3d { width: fw, height: fh, depth_or_array_layers: 1 },
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
@@ -116,6 +104,12 @@ fn update_camera_texture(
 
     if let Some(image) = images.get_mut(&sprite.image) {
         *image = new_image;
+        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            eprintln!("[CAM] First frame COPIED to texture");
+        }
+    } else {
+        eprintln!("[CAM] Image handle not found in Assets!");
     }
 
     if let Ok(window) = windows.get_single() {
