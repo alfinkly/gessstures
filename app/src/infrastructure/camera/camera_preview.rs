@@ -92,20 +92,23 @@ fn update_camera_texture(
         return;
     }
 
-    let new_image = Image::new(
-        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-
     let Ok((mut transform, sprite)) = query.get_single_mut() else {
         return;
     };
 
     if let Some(image) = images.get_mut(&sprite.image) {
-        *image = new_image;
+        let expected = (w * h * 4) as usize;
+        if image.data.len() == expected && data.len() >= expected {
+            image.data[..expected].copy_from_slice(&data[..expected]);
+        } else if data.len() >= expected {
+            *image = Image::new(
+                Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                TextureDimension::D2,
+                data,
+                TextureFormat::Rgba8UnormSrgb,
+                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+            );
+        }
     }
 
     if let Ok(window) = windows.get_single() {

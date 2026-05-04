@@ -1,11 +1,11 @@
-"""MediaPipe Pose Landmarker Sidecar — opens camera, detects people.
-Outputs JSON bounding boxes to stdout."""
+"""MediaPipe Pose Landmarker Sidecar — reads frames from stdin.
+Receives WIDTH HEIGHT line + raw RGBA bytes, outputs JSON to stdout."""
 
 import json
 import time
 import sys
 import os
-import cv2
+import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -18,13 +18,6 @@ def main():
         print(json.dumps({"error": f"Model not found: {model_path}", "person_count": 0, "persons": []}), flush=True)
         sys.exit(1)
 
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print(json.dumps({"error": "Cannot open camera", "person_count": 0, "persons": []}), flush=True)
-        sys.exit(1)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
     base_options = python.BaseOptions(model_asset_path=model_path)
     options = vision.PoseLandmarkerOptions(
         base_options=base_options, running_mode=vision.RunningMode.IMAGE,
@@ -34,11 +27,20 @@ def main():
 
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                time.sleep(0.1)
+            dims_line = sys.stdin.readline()
+            if not dims_line:
+                break
+            parts = dims_line.strip().split()
+            if len(parts) < 2:
                 continue
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            width, height = int(parts[0]), int(parts[1])
+            frame_size = width * height * 4
+            raw_data = sys.stdin.buffer.read(frame_size)
+            if len(raw_data) < frame_size:
+                break
+
+            img_array = np.frombuffer(raw_data, dtype=np.uint8).reshape((height, width, 4))
+            frame_rgb = img_array[:, :, :3].copy()
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
             result = landmarker.detect(mp_image)
 
@@ -62,7 +64,6 @@ def main():
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
-        cap.release()
         landmarker.close()
 
 if __name__ == "__main__":
