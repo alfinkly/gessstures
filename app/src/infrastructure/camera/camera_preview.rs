@@ -79,40 +79,43 @@ fn update_camera_texture(
 ) {
     let camera_res = match camera_res {
         Some(r) => r,
-        None => return,
+        None => {
+            static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                info!("[CAM] No CameraResource yet");
+            }
+            return;
+        }
     };
 
-    let frame = {
+    let frame_data = {
         let guard = camera_res.frame.lock().unwrap();
-        guard.as_ref().cloned()
+        guard.as_ref().map(|f| (f.data.clone(), f.width, f.height))
     };
 
-    let (w, h) = match frame {
-        Some(ref f) => (f.width, f.height),
-        None => return,
+    let Some((data, w, h)) = frame_data else { return };
+
+    let Ok((mut transform, sprite)) = query.get_single_mut() else {
+        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            info!("[CAM] No CameraBackground sprite found");
+        }
+        return;
     };
 
-    let Ok((mut transform, sprite)) = query.get_single_mut() else { return };
+    let expected = (w * h * 4) as usize;
+    if data.len() < expected { return; }
+
+    let new_image = Image::new(
+        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
 
     if let Some(image) = images.get_mut(&sprite.image) {
-        let expected = (w * h * 4) as usize;
-        if image.data.len() == expected {
-            if let Some(ref frame) = frame {
-                if frame.data.len() >= expected {
-                    image.data[..expected].copy_from_slice(&frame.data[..expected]);
-                }
-            }
-        } else if let Some(frame) = frame {
-            if frame.data.len() >= expected {
-                *image = Image::new(
-                    Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                    TextureDimension::D2,
-                    frame.data[..expected].to_vec(),
-                    TextureFormat::Rgba8UnormSrgb,
-                    RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-                );
-            }
-        }
+        *image = new_image;
     }
 
     if let Ok(window) = windows.get_single() {
