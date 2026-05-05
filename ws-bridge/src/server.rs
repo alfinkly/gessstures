@@ -157,6 +157,7 @@ pub async fn start(port: u16, engine: Arc<Mutex<Engine>>, tracker: Arc<Mutex<fac
                     }
                 })
                 .collect();
+            eprintln!("[people] broadcasting {} people", people.len());
             if let Ok(json) = serde_json::to_string(&PeopleList { people }) {
                 let _ = ptx.send(json);
             }
@@ -241,9 +242,11 @@ async fn handle_connection(
                     if let Some(ref det) = face_det {
                         if last_face_det.elapsed() >= std::time::Duration::from_secs(1) {
                             last_face_det = tokio::time::Instant::now();
+                            eprintln!("[face_det] running detection...");
                             match det.detect(&data).await {
                                 Ok(r) => {
                                     if let Ok(fr) = serde_json::from_str::<FaceResponse>(&r) {
+                                        eprintln!("[face_det] got {} faces", fr.faces.len());
                                         let now = face_tracker::now_secs();
                                         let snapshots: Vec<face_tracker::FaceSnapshot> = fr.faces.into_iter().map(|f| {
                                             let jpeg_bytes = base64_decode(&f.face_jpeg_b64);
@@ -256,9 +259,12 @@ async fn handle_connection(
                                             }
                                         }).collect();
                                         if !snapshots.is_empty() {
+                                            eprintln!("[face_det] ingesting {} faces into tracker", snapshots.len());
                                             let mut t = tr.lock().await;
                                             t.ingest(snapshots, now);
                                         }
+                                    } else {
+                                        eprintln!("[face_det] failed to parse response: {}", r);
                                     }
                                 }
                                 Err(e) => eprintln!("face detect err: {e}"),

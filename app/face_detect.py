@@ -42,7 +42,12 @@ def _read_frame():
 
 
 def main():
+    # redirect model/onnx logs from stdout -> stderr so protocol stays clean
+    old_fd = os.dup(1)
+    os.dup2(2, 1)
     load_model()
+    os.dup2(old_fd, 1)
+    os.close(old_fd)
 
     while True:
         jpeg_data = _read_frame()

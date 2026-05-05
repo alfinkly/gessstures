@@ -75,22 +75,29 @@ function CameraBodyDetect() {
     let frameCount = 0
     function connect() {
       ws = new WebSocket(wsUrl)
-      ws.onopen = () => console.log('[bodycam] WS connected')
+      ws.onopen = () => {
+        console.log('[bodycam] WS connected')
+        ;(window as any).__bodyCamConnected?.(true)
+      }
       ws.onmessage = (e) => {
         if (typeof e.data !== 'string') return
         try {
           const d = JSON.parse(e.data)
-          console.log('[bodycam] msg keys:', Object.keys(d), 'person_count:', d.person_count)
           if (d.person_count !== undefined) {
             bodyResultRef.current = d
             setPersonCount(d.person_count ?? 0)
-            console.log('[bodycam] calling __bodyDetect(', d.person_count, ')')
             ;(window as any).__bodyDetect?.(d.person_count)
+            if (d.error) {
+              ;(window as any).__pushLog?.('[body] ' + d.error)
+            }
           }
-        } catch {}
+        } catch (e) {
+          ;(window as any).__pushLog?.('[bodycam] parse error: ' + e)
+        }
       }
       ws.onclose = () => {
         console.log('[bodycam] WS closed, reconnecting in 2s')
+        ;(window as any).__bodyCamConnected?.(false)
         reconnectTimer = setTimeout(connect, 2000)
       }
     }
@@ -362,10 +369,16 @@ export default function CafePage() {
   const bodyCountRef = useRef(0)
   const bodyTimerRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
+  // system health
+  const [bodyCamConnected, setBodyCamConnected] = useState(false)
+  const [mainWsConnected, setMainWsConnected] = useState(false)
+  const lastBodyDetectRef = useRef(0)
+  const [sysLogs, setSysLogs] = useState<{ time: string; msg: string }[]>([])
+
   useEffect(() => {
     (window as any).__bodyDetect = (person_count: number) => {
-      console.log('[local] __bodyDetect called with', person_count, 'people')
       const now = Date.now() / 1000
+      lastBodyDetectRef.current = now
       bodyCountRef.current = person_count
       // capture who was current before reset
       const wasCurrent = new Map<number, boolean>()
@@ -412,11 +425,26 @@ export default function CafePage() {
 
   useEffect(() => {
     const w = window as any
-    w.__camConnected = (v: boolean) => { wsConnectedRef.current = v }
+    w.__camConnected = (v: boolean) => {
+      wsConnectedRef.current = v
+      setMainWsConnected(v)
+    }
+    w.__bodyCamConnected = (v: boolean) => setBodyCamConnected(v)
     w.__peopleData = (list: PersonData[]) => {
       setPeople(list)
     }
-    return () => { delete (window as any).__camConnected; delete (window as any).__peopleData }
+    w.__pushLog = (msg: string) => {
+      setSysLogs(prev => {
+        const next = [...prev, { time: new Date().toLocaleTimeString(), msg }]
+        return next.length > 100 ? next.slice(-100) : next
+      })
+    }
+    return () => {
+      delete (window as any).__camConnected
+      delete (window as any).__bodyCamConnected
+      delete (window as any).__peopleData
+      delete (window as any).__pushLog
+    }
   }, [])
 
   useEffect(() => {
@@ -451,10 +479,12 @@ export default function CafePage() {
             ;(window as any).__bodyResult?.(d)
             ;(window as any).__bodyDetect?.(d.person_count)
           }
-        } catch {}
-      }
-      ws.onclose = () => {
-        console.log('[cafe-ws] closed, reconnecting in 2s')
+          } catch (e) {
+            ;(window as any).__pushLog?.('[cafe-ws] parse error: ' + e)
+          }
+        }
+        ws.onclose = () => {
+          console.log('[cafe-ws] closed, reconnecting in 2s')
         ;(window as any).__camConnected?.(false)
         reconnectTimer = setTimeout(connect, 2000)
       }
@@ -549,9 +579,41 @@ export default function CafePage() {
         )}
       </div>
 
-      {/* Footer */}
-      <div style={{ marginTop: 30, fontSize: 11, color: '#475569', textAlign: 'center' }}>
-        Gessstures Cafe MVP &mdash; face recognition + people tracking
+      {/* System status */}
+      <div style={{ marginTop: 30, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>SYSTEM</h2>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <StatusBadge label="Camera WS" active={bodyCamConnected} />
+          <StatusBadge label="Main WS" active={mainWsConnected} />
+          <StatusBadge
+            label="Body detection"
+            active={bodyCamConnected && (Date.now() / 1000 - lastBodyDetectRef.current) < 3}
+            detail={bodyCamConnected ? `person_count: ${bodyCountRef.current}` : undefined}
+          />
+          <StatusBadge
+            label="Face tracker"
+            active={people.length > 0}
+            detail={people.length > 0 ? `${people.length} people` : 'no data'}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+          Logs ({sysLogs.length}) <span style={{ cursor: 'pointer', color: '#6366f1', textDecoration: 'underline' }}
+            onClick={() => {
+              const text = sysLogs.map(l => `[${l.time}] ${l.msg}`).join('\n')
+              navigator.clipboard.writeText(text)
+            }}>copy all</span>
+        </div>
+        <div style={{ maxHeight: 100, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', lineHeight: 1.5 }}>
+          {sysLogs.length === 0 && <span style={{ color: '#475569' }}>—</span>}
+          {sysLogs.map((l, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <span style={{ color: '#64748b', flexShrink: 0, userSelect: 'none' }}>{l.time}</span>
+              <span style={{ color: '#e2e8f0', wordBreak: 'break-all', cursor: 'pointer' }}
+                onClick={() => navigator.clipboard.writeText(`[${l.time}] ${l.msg}`)}
+                title="click to copy">{l.msg}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -564,6 +626,22 @@ function StatBox({ label, value }: { label: string; value: string }) {
     }}>
       <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: '#e2e8f0', marginTop: 2 }}>{value}</div>
+    </div>
+  )
+}
+
+function StatusBadge({ label, active, detail }: { label: string; active: boolean; detail?: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 12px', fontSize: 12,
+    }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+        background: active ? '#4ade80' : '#f87171',
+      }} />
+      <span style={{ color: '#94a3b8' }}>{label}</span>
+      {detail !== undefined && <span style={{ color: '#e2e8f0' }}>{detail}</span>}
     </div>
   )
 }
