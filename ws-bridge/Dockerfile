@@ -6,9 +6,13 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY graph-core graph-core
+COPY ai-pipeline ai-pipeline
 COPY data-sources data-sources
+COPY input-sources input-sources
 COPY engine engine
 COPY physics-core physics-core
+COPY app app
+COPY hand-tracking-core hand-tracking-core
 COPY ws-bridge ws-bridge
 
 RUN cargo build --release -p ws_bridge && cp target/release/ws-bridge /ws-bridge
