@@ -18,10 +18,10 @@ FROM python:3.12-slim
 
 # Python deps for body + face detection
 RUN pip install --no-cache-dir \
-    mediapipe==0.10.21 \
-    opencv-python-headless==4.11.0.86 \
-    numpy==2.2.5 \
-    insightface==0.7.3
+    mediapipe \
+    opencv-python-headless \
+    numpy \
+    insightface
 
 # System deps for MediaPipe + OpenCV
 RUN apt-get update && apt-get install -y \
