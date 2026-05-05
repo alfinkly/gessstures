@@ -23,7 +23,7 @@ struct CmdMsg {
 
 #[derive(Clone)]
 struct Detector {
-    inner: Arc<Mutex<DetectorInner>>,
+    inner: Arc<Mutex<(String, DetectorInner)>>,
 }
 
 struct DetectorInner {
@@ -33,7 +33,7 @@ struct DetectorInner {
 }
 
 impl Detector {
-    async fn new(py_script: &str) -> Result<Self, String> {
+    async fn spawn_process(py_script: &str) -> Result<DetectorInner, String> {
         let mut child = Command::new("python3")
             .args(["-u", py_script])
             .stdin(std::process::Stdio::piped())
@@ -45,20 +45,53 @@ impl Detector {
         let stdin = child.stdin.take().ok_or("no stdin")?;
         let stdout = BufReader::new(child.stdout.take().ok_or("no stdout")?);
 
+        Ok(DetectorInner { _child: child, stdin, stdout })
+    }
+
+    async fn new(py_script: &str) -> Result<Self, String> {
+        let inner = Self::spawn_process(py_script).await?;
         Ok(Self {
-            inner: Arc::new(Mutex::new(DetectorInner { _child: child, stdin, stdout })),
+            inner: Arc::new(Mutex::new((py_script.to_string(), inner))),
         })
     }
 
     async fn detect(&self, jpeg: &[u8]) -> Result<String, String> {
-        let mut inner = self.inner.lock().await;
-        let size = (jpeg.len() as u32).to_be_bytes();
-        inner.stdin.write_all(&size).await.map_err(|e| format!("stdin: {e}"))?;
-        inner.stdin.write_all(jpeg).await.map_err(|e| format!("stdin: {e}"))?;
-        inner.stdin.flush().await.map_err(|e| format!("flush: {e}"))?;
-        let mut line = String::new();
-        inner.stdout.read_line(&mut line).await.map_err(|e| format!("stdout: {e}"))?;
-        Ok(line.trim().to_string())
+        let mut guard = self.inner.lock().await;
+        let (ref script, ref mut inner) = &mut *guard;
+
+        let do_detect = async {
+            let size = (jpeg.len() as u32).to_be_bytes();
+            inner.stdin.write_all(&size).await.map_err(|e| format!("stdin: {e}"))?;
+            inner.stdin.write_all(jpeg).await.map_err(|e| format!("stdin: {e}"))?;
+            inner.stdin.flush().await.map_err(|e| format!("flush: {e}"))?;
+            let mut line = String::new();
+            inner.stdout.read_line(&mut line).await.map_err(|e| format!("stdout: {e}"))?;
+            Ok::<_, String>(line.trim().to_string())
+        };
+
+        match do_detect.await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                eprintln!("detector process died, restarting...");
+                match Self::spawn_process(script).await {
+                    Ok(new_inner) => {
+                        *inner = new_inner;
+                        // retry once
+                        let size = (jpeg.len() as u32).to_be_bytes();
+                        inner.stdin.write_all(&size).await.map_err(|e| format!("stdin: {e}"))?;
+                        inner.stdin.write_all(jpeg).await.map_err(|e| format!("stdin: {e}"))?;
+                        inner.stdin.flush().await.map_err(|e| format!("flush: {e}"))?;
+                        let mut line = String::new();
+                        inner.stdout.read_line(&mut line).await.map_err(|e| format!("stdout: {e}"))?;
+                        Ok(line.trim().to_string())
+                    }
+                    Err(restart_e) => {
+                        eprintln!("restart failed: {restart_e}");
+                        Err(e)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -191,18 +224,47 @@ async fn handle_connection(
     let (response_tx, mut response_rx) = mpsc::channel::<String>(32);
 
     // receiver task: handle incoming messages
+    let tr = tracker.clone();
     tokio::spawn(async move {
+        let mut last_face_det = tokio::time::Instant::now();
         while let Some(Ok(msg)) = ws_receiver.next().await {
             match msg {
                 Message::Binary(data) => {
-                    // forward to both detectors
+                    // body detection (every frame)
                     if let Some(ref det) = body_det {
                         match det.detect(&data).await {
                             Ok(r) => { let _ = response_tx.send(r).await; }
                             Err(e) => eprintln!("body detect err: {e}"),
                         }
                     }
-                    // face_det runs on its own schedule (not per-frame)
+                    // face detection (at most once per second)
+                    if let Some(ref det) = face_det {
+                        if last_face_det.elapsed() >= std::time::Duration::from_secs(1) {
+                            last_face_det = tokio::time::Instant::now();
+                            match det.detect(&data).await {
+                                Ok(r) => {
+                                    if let Ok(fr) = serde_json::from_str::<FaceResponse>(&r) {
+                                        let now = face_tracker::now_secs();
+                                        let snapshots: Vec<face_tracker::FaceSnapshot> = fr.faces.into_iter().map(|f| {
+                                            let jpeg_bytes = base64_decode(&f.face_jpeg_b64);
+                                            face_tracker::FaceSnapshot {
+                                                bbox: f.bbox_norm,
+                                                embedding: f.embedding,
+                                                face_jpeg: jpeg_bytes,
+                                                camera_id: "cam_0".into(),
+                                                timestamp: now,
+                                            }
+                                        }).collect();
+                                        if !snapshots.is_empty() {
+                                            let mut t = tr.lock().await;
+                                            t.ingest(snapshots, now);
+                                        }
+                                    }
+                                }
+                                Err(e) => eprintln!("face detect err: {e}"),
+                            }
+                        }
+                    }
                 }
                 Message::Text(text) => {
                     if let Ok(cmd) = serde_json::from_str::<CmdMsg>(&text) {

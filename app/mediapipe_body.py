@@ -54,35 +54,38 @@ def main():
             if jpeg_data is None or len(jpeg_data) == 0:
                 break
 
-            np_arr = np.frombuffer(jpeg_data, dtype=np.uint8)
-            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            if frame is None:
-                continue
+            try:
+                np_arr = np.frombuffer(jpeg_data, dtype=np.uint8)
+                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                if frame is None:
+                    continue
 
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
-            result = landmarker.detect(mp_image)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+                result = landmarker.detect(mp_image)
 
-            if result.pose_landmarks:
-                persons = []
-                for pose in result.pose_landmarks:
-                    xs = [lm.x for lm in pose]
-                    ys = [lm.y for lm in pose]
-                    margin = 0.1
-                    cx, cy = (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
-                    w = (max(xs) - min(xs)) * (1 + 2 * margin)
-                    h = (max(ys) - min(ys)) * (1 + 2 * margin)
-                    persons.append({
-                        "bbox": [cx, cy, w, h],
-                        "keypoints": [[lm.x, lm.y, lm.z] for lm in pose],
-                    })
-                output = {
-                    "person_count": len(persons),
-                    "persons": persons,
-                    "timestamp": time.time(),
-                }
-            else:
-                output = {"person_count": 0, "persons": [], "timestamp": time.time()}
+                if result.pose_landmarks:
+                    persons = []
+                    for pose in result.pose_landmarks:
+                        xs = [lm.x for lm in pose]
+                        ys = [lm.y for lm in pose]
+                        margin = 0.1
+                        cx, cy = (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+                        w = (max(xs) - min(xs)) * (1 + 2 * margin)
+                        h = (max(ys) - min(ys)) * (1 + 2 * margin)
+                        persons.append({
+                            "bbox": [cx, cy, w, h],
+                            "keypoints": [[lm.x, lm.y, lm.z] for lm in pose],
+                        })
+                    output = {
+                        "person_count": len(persons),
+                        "persons": persons,
+                        "timestamp": time.time(),
+                    }
+                else:
+                    output = {"person_count": 0, "persons": [], "timestamp": time.time()}
+            except Exception as e:
+                output = {"person_count": 0, "persons": [], "error": str(e), "timestamp": time.time()}
 
             print(json.dumps(output), flush=True)
     except (KeyboardInterrupt, SystemExit):

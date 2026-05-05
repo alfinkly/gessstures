@@ -68,40 +68,74 @@ function CameraBodyDetect() {
       if (host === 'localhost' || host === '127.0.0.1' || host.match(/^192\.168\./)) return `${proto}//${host}:3030`
       return `${proto}//${host}:${window.location.port || '443'}/ws`
     })()
-    const ws = new WebSocket(wsUrl)
-    ws.onmessage = (e) => {
-      if (typeof e.data !== 'string') return
-      try {
-        const d = JSON.parse(e.data)
-        if (d.person_count !== undefined) {
-          bodyResultRef.current = d
-          setPersonCount(d.person_count ?? 0)
-          // also notify global local tracker
-          ;(window as any).__bodyDetect?.(d.person_count)
-        }
-      } catch {}
-    }
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout>
     const cap = document.createElement('canvas'); cap.width = W; cap.height = H
+
+    let frameCount = 0
+    function connect() {
+      ws = new WebSocket(wsUrl)
+      ws.onopen = () => console.log('[bodycam] WS connected')
+      ws.onmessage = (e) => {
+        if (typeof e.data !== 'string') return
+        try {
+          const d = JSON.parse(e.data)
+          console.log('[bodycam] msg keys:', Object.keys(d), 'person_count:', d.person_count)
+          if (d.person_count !== undefined) {
+            bodyResultRef.current = d
+            setPersonCount(d.person_count ?? 0)
+            console.log('[bodycam] calling __bodyDetect(', d.person_count, ')')
+            ;(window as any).__bodyDetect?.(d.person_count)
+          }
+        } catch {}
+      }
+      ws.onclose = () => {
+        console.log('[bodycam] WS closed, reconnecting in 2s')
+        reconnectTimer = setTimeout(connect, 2000)
+      }
+    }
+
+    connect()
+
     const int = setInterval(() => {
       const v = videoRef.current
-      if (!v || ws.readyState !== WebSocket.OPEN) return
+      if (!v || !ws || ws.readyState !== WebSocket.OPEN) return
       const ctx = cap.getContext('2d'); if (!ctx) return
       ctx.drawImage(v, 0, 0, W, H)
-      cap.toBlob(blob => { if (blob) blob.arrayBuffer().then(buf => ws.send(buf)) }, 'image/jpeg', 0.8)
+      frameCount++
+      cap.toBlob(blob => {
+        if (blob) {
+          console.log('[bodycam] sending frame', frameCount)
+          blob.arrayBuffer().then(buf => ws?.send(buf))
+        }
+      }, 'image/jpeg', 0.8)
     }, 200)
-    return () => { clearInterval(int); ws.close() }
+    return () => { clearTimeout(reconnectTimer); clearInterval(int); ws?.close() }
   }, [])
 
   // render loop for overlay + tiles
   useEffect(() => {
+    let renderCount = 0
     function render() {
       animRef.current = requestAnimationFrame(render)
+      renderCount++
       const ov = overlayRef.current; const v = videoRef.current; const tr = tilesRowRef.current
       if (!ov || !v || !tr) return
       const ctx = ov.getContext('2d'); if (!ctx) return
-      ctx.drawImage(v, 0, 0, W, H)
+
+      try {
+        ctx.drawImage(v, 0, 0, W, H)
+      } catch (e) {
+        console.log('[render] drawImage error:', e)
+        return
+      }
 
       const result = bodyResultRef.current
+
+      if (renderCount % 30 === 0) {
+        console.log('[render] frame', renderCount, 'result:', result ? 'persons=' + result.persons?.length + ' count=' + result.person_count : 'null')
+      }
+
       let count = 0
 
       if (result?.persons) {
@@ -195,7 +229,9 @@ interface PersonData {
 
 // ── Person Card ────────────────────────────────────────────────────
 function PersonCard({ p, selected, onClick }: { p: PersonData; selected: boolean; onClick: () => void }) {
-  const faceUrl = p.face_jpeg_b64 ? `data:image/jpeg;base64,${p.face_jpeg_b64}` : null
+  const faceUrl = p.face_jpeg_b64
+    ? (p.face_jpeg_b64.startsWith('data:') ? p.face_jpeg_b64 : `data:image/jpeg;base64,${p.face_jpeg_b64}`)
+    : null
   return (
     <div
       onClick={onClick}
@@ -320,15 +356,20 @@ export default function CafePage() {
 
   const [localStats, setLocalStats] = useState({ total: 0, inView: 0, visits: 0 })
   const localPeopleRef = useRef<Map<number, {
-    first: number; last: number; totalSecs: number; visits: number; current: boolean
+    first: number; last: number; totalSecs: number; current: boolean; faceJpeg: string
+    visitHistory: { start: number; end: number }[]
   }>>(new Map())
   const bodyCountRef = useRef(0)
   const bodyTimerRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
   useEffect(() => {
     (window as any).__bodyDetect = (person_count: number) => {
+      console.log('[local] __bodyDetect called with', person_count, 'people')
       const now = Date.now() / 1000
       bodyCountRef.current = person_count
+      // capture who was current before reset
+      const wasCurrent = new Map<number, boolean>()
+      for (const [id, p] of localPeopleRef.current) wasCurrent.set(id, p.current)
       for (const p of localPeopleRef.current.values()) p.current = false
       for (let i = 0; i < person_count; i++) {
         const existing = localPeopleRef.current.get(i)
@@ -337,17 +378,23 @@ export default function CafePage() {
           existing.totalSecs += delta
           existing.last = now
           existing.current = true
-          console.log(`[local] update #${i}: +${delta.toFixed(2)}s = ${existing.totalSecs.toFixed(2)}s`)
+          console.log('[local] update #' + i + ': +' + delta.toFixed(2) + 's = ' + existing.totalSecs.toFixed(2) + 's')
+          if (wasCurrent.get(i)) {
+            // still in view — extend current visit
+            const v = existing.visitHistory[existing.visitHistory.length - 1]
+            if (v) v.end = now
+          } else {
+            // came back — start new visit
+            existing.visitHistory.push({ start: now, end: now })
+          }
         } else {
+          console.log('[local] create #' + i)
           localPeopleRef.current.set(i, {
-            first: now, last: now, totalSecs: 0, visits: 0, current: true,
+            first: now, last: now, totalSecs: 0, current: true,
+            faceJpeg: '',
+            visitHistory: [{ start: now, end: now }],
           })
-          console.log(`[local] create #${i}`)
         }
-      }
-      // log state
-      for (const [id, p] of localPeopleRef.current) {
-        console.log(`[local] person #${id}: totalSecs=${p.totalSecs.toFixed(2)} current=${p.current}`)
       }
     }
     // compute stats every second
@@ -373,7 +420,6 @@ export default function CafePage() {
   }, [])
 
   useEffect(() => {
-    // connect to ws and listen for people messages
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
     const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     let wsAddr: string
@@ -383,24 +429,39 @@ export default function CafePage() {
       const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
       wsAddr = `${proto}//${host}:${port}/ws`
     }
-    const ws = new WebSocket(wsAddr)
-    ws.onmessage = (e) => {
-      if (typeof e.data !== 'string') return
-      try {
-        const d = JSON.parse(e.data)
-        console.log('[cafe ws]', Object.keys(d), d.t)
-        if (d.t === 'people' && d.d?.people) {
-          console.log('[cafe] people update:', d.d.people.length, 'people')
-          setPeople(d.d.people)
-        } else if (d.person_count !== undefined) {
-          (window as any).__bodyResult?.(d)
-          (window as any).__bodyDetect?.(d.person_count)
-        }
-      } catch {}
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout>
+
+    function connect() {
+      ws = new WebSocket(wsAddr)
+      ws.onopen = () => {
+        console.log('[cafe-ws] connected')
+        ;(window as any).__camConnected?.(true)
+      }
+      ws.onmessage = (e) => {
+        if (typeof e.data !== 'string') return
+        try {
+          const d = JSON.parse(e.data)
+          console.log('[cafe-ws] msg keys:', Object.keys(d), 't:', d.t, 'person_count:', d.person_count)
+          if (d.t === 'people' && d.d?.people) {
+            console.log('[cafe-ws] people update:', d.d.people.length, 'people')
+            setPeople(d.d.people)
+          } else if (d.person_count !== undefined) {
+            console.log('[cafe-ws] body result, calling __bodyDetect')
+            ;(window as any).__bodyResult?.(d)
+            ;(window as any).__bodyDetect?.(d.person_count)
+          }
+        } catch {}
+      }
+      ws.onclose = () => {
+        console.log('[cafe-ws] closed, reconnecting in 2s')
+        ;(window as any).__camConnected?.(false)
+        reconnectTimer = setTimeout(connect, 2000)
+      }
     }
-    ws.onopen = () => (window as any).__camConnected?.(true)
-    ws.onclose = () => (window as any).__camConnected?.(false)
-    return () => ws.close()
+
+    connect()
+    return () => { clearTimeout(reconnectTimer); ws?.close() }
   }, [])
 
   const selected = people.find(p => p.id === selectedId) ?? null
@@ -415,9 +476,9 @@ export default function CafePage() {
         first_seen: p.first,
         last_seen: p.last,
         total_seen_secs: p.totalSecs,
-        visit_count: p.visits,
-        face_jpeg_b64: '',
-        visits: [{ start: p.first, end: p.last, camera_id: 'cam_0' }],
+        visit_count: p.visitHistory.length,
+        face_jpeg_b64: p.faceJpeg,
+        visits: p.visitHistory.map(v => ({ start: v.start, end: v.end, camera_id: 'cam_0' })),
         current: p.current,
       })
     }
@@ -481,7 +542,7 @@ export default function CafePage() {
 
         {/* Detail panel */}
         {selectedMerged && (
-          <div style={{ flex: 2, minWidth: 0, padding: '0 4px' }}>
+          <div style={{ flex: 2, minWidth: 0, padding: '0 4px', maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
             <PersonTimeline p={selectedMerged} />
             <PersonVideo p={selectedMerged} />
           </div>
