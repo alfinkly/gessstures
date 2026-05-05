@@ -118,10 +118,17 @@ impl FaceTracker {
         }
         let mut best = (0usize, 0.0f32);
         for person in &self.people {
-            let last_visit = person.visits.last();
-            let last_snap = last_visit.and_then(|v| v.face_snapshots.last());
-            if let Some(snap) = last_snap {
-                let sim = cosine_similarity(emb, &snap.embedding);
+            // check closed visits first, then current (open) visit — may not be closed yet
+            let last_emb = person.visits.last()
+                .and_then(|v| v.face_snapshots.last())
+                .map(|s| &s.embedding[..])
+                .or_else(|| {
+                    self.current_visits.get(&person.id)
+                        .and_then(|v| v.face_snapshots.last())
+                        .map(|s| &s.embedding[..])
+                });
+            if let Some(last_emb) = last_emb {
+                let sim = cosine_similarity(emb, last_emb);
                 if sim > best.1 {
                     best = (person.id, sim);
                 }
