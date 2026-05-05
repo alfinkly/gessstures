@@ -36,8 +36,8 @@ COPY --from=builder /ws-bridge .
 # Python scripts
 COPY app/mediapipe_body.py app/face_detect.py ./app/
 
-# Models (mount as volume at runtime, or copy if present)
-COPY models/pose_landmarker_full.task models/hand_landmarker.task ./models/ 2>/dev/null || true
+# Models dir (actual files mounted as volume at runtime: ./models:/app/models)
+RUN mkdir -p models
 
 EXPOSE 3030
 
