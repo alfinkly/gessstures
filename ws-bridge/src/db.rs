@@ -212,14 +212,4 @@ pub async fn load_person_visits(pool: &PgPool, person_id: i32) -> Vec<DbVisit> {
         .collect()
 }
 
-pub async fn close_stale_visits(pool: &PgPool, now: f64, stale_threshold: f64) {
-    sqlx::query(
-        "UPDATE person_visits SET end_time = $1 \
-         WHERE end_time = start_time AND start_time < $2",
-    )
-    .bind(now)
-    .bind(now - stale_threshold)
-    .execute(pool)
-    .await
-    .unwrap();
-}
+

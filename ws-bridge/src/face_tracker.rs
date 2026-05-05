@@ -356,11 +356,12 @@ impl FaceTracker {
 
     pub async fn close_stale_visits(&mut self) {
         let now = now_secs();
-        db::close_stale_visits(&self.pool, now, STALE_SECS).await;
-
         for person in &mut self.people {
-            if person.open_visit_id.is_some() && now - person.last_seen > STALE_SECS {
-                person.open_visit_id = None;
+            if let Some(vid) = person.open_visit_id {
+                if now - person.last_seen > STALE_SECS {
+                    db::update_visit_end(&self.pool, vid, person.last_seen).await;
+                    person.open_visit_id = None;
+                }
             }
         }
     }
