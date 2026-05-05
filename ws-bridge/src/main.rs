@@ -19,20 +19,46 @@ struct Cli {
     #[arg(short, long, default_value = "3030")]
     port: u16,
 
-    #[arg(long, default_value = "postgres://gessstures:gessstures@localhost:5432/gessstures")]
-    database_url: String,
+    #[arg(long)]
+    database_url: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&cli.database_url)
-        .await
-        .expect("Failed to connect to PostgreSQL");
-    db::run_migrations(&pool).await;
+    // optional PostgreSQL — without it, runs in-memory
+    let tracker = if let Some(ref url) = cli.database_url {
+        println!("[main] connecting to PostgreSQL...");
+        match PgPoolOptions::new().max_connections(5).connect(url).await {
+            Ok(pool) => {
+                db::run_migrations(&pool).await;
+                let tr = face_tracker::FaceTracker::new(pool).await;
+                let tr = Arc::new(Mutex::new(tr));
+
+                let stale_tr = tr.clone();
+                tokio::spawn(async move {
+                    let mut int = tokio::time::interval(std::time::Duration::from_secs(1));
+                    loop {
+                        int.tick().await;
+                        let mut t = stale_tr.lock().await;
+                        t.close_stale_visits().await;
+                    }
+                });
+
+                tr
+            }
+            Err(e) => {
+                eprintln!("[main] PostgreSQL unavailable ({}), falling back to in-memory", e);
+                let tr = face_tracker::FaceTracker::new_memory();
+                Arc::new(Mutex::new(tr))
+            }
+        }
+    } else {
+        println!("[main] no --database-url, running in-memory");
+        let tr = face_tracker::FaceTracker::new_memory();
+        Arc::new(Mutex::new(tr))
+    };
 
     let mut engine = Engine::new();
     let contents = loader::load_markdown_folder(&cli.notes);
@@ -43,7 +69,6 @@ async fn main() {
     println!("Graph: {} nodes, {} edges", engine.graph.node_count(), engine.graph.edge_count());
 
     let engine = Arc::new(Mutex::new(engine));
-    let tracker = Arc::new(Mutex::new(face_tracker::FaceTracker::new(pool).await));
 
     let engine_clone = engine.clone();
     tokio::spawn(async move {
@@ -52,16 +77,6 @@ async fn main() {
             interval.tick().await;
             let mut eng = engine_clone.lock().await;
             eng.tick();
-        }
-    });
-
-    let tr = tracker.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
-        loop {
-            interval.tick().await;
-            let mut t = tr.lock().await;
-            t.close_stale_visits().await;
         }
     });
 

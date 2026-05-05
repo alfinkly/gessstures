@@ -55,13 +55,23 @@ struct PendingBuffer {
 }
 
 pub struct FaceTracker {
-    pool: PgPool,
+    pool: Option<PgPool>,
     pub people: Vec<CachedPerson>,
     next_temp_id: u64,
     pending: HashMap<u64, PendingBuffer>,
 }
 
 impl FaceTracker {
+    pub fn new_memory() -> Self {
+        Self {
+            pool: None,
+            people: Vec::new(),
+            next_temp_id: 1000,
+            pending: HashMap::new(),
+        }
+    }
+
+    /// Create with PostgreSQL backend.
     pub async fn new(pool: PgPool) -> Self {
         let persons = db::load_all_persons(&pool).await;
         let open_visits = db::load_open_visits(&pool).await;
@@ -105,7 +115,7 @@ impl FaceTracker {
 
         println!("[tracker] loaded {} persons from DB", people.len());
         Self {
-            pool,
+            pool: Some(pool),
             people,
             next_temp_id: 1000,
             pending: HashMap::new(),
@@ -274,15 +284,15 @@ impl FaceTracker {
             }
         }
 
-        db::update_person_touch(&self.pool, pid, now, (now - face.timestamp).max(0.0)).await;
+        db::update_person_touch(self.pool.as_ref().unwrap(), pid, now, (now - face.timestamp).max(0.0)).await;
 
         if let Some(person) = self.people.iter().find(|p| p.id == pid) {
             match person.open_visit_id {
                 Some(vid) => {
-                    db::update_visit_end(&self.pool, vid, now).await;
+                    db::update_visit_end(self.pool.as_ref().unwrap(), vid, now).await;
                 }
                 None => {
-                    let vid = db::create_visit(&self.pool, pid, now, &face.camera_id).await;
+                    let vid = db::create_visit(self.pool.as_ref().unwrap(), pid, now, &face.camera_id).await;
                     if let Some(p) = self.people.iter_mut().find(|p| p.id == pid) {
                         p.open_visit_id = Some(vid);
                     }
@@ -295,10 +305,10 @@ impl FaceTracker {
     }
 
     async fn create_new(&mut self, face: FaceSnapshot, now: f64) {
-        let pid = db::create_person(&self.pool, now).await;
-        let vid = db::create_visit(&self.pool, pid, now, &face.camera_id).await;
+        let pid = db::create_person(self.pool.as_ref().unwrap(), now).await;
+        let vid = db::create_visit(self.pool.as_ref().unwrap(), pid, now, &face.camera_id).await;
 
-        db::add_embedding(&self.pool, pid, &face.embedding, &face.face_jpeg, now).await;
+        db::add_embedding(self.pool.as_ref().unwrap(), pid, &face.embedding, &face.face_jpeg, now).await;
 
         self.people.push(CachedPerson {
             id: pid,
@@ -330,6 +340,10 @@ impl FaceTracker {
         face_jpeg: &[u8],
         now: f64,
     ) {
+        let pool = match self.pool.clone() {
+            Some(p) => p,
+            None => return,
+        };
         let person = match self.people.iter_mut().find(|p| p.id == pid) {
             Some(p) => p,
             None => return,
@@ -341,7 +355,7 @@ impl FaceTracker {
             }
         }
 
-        db::add_embedding(&self.pool, pid, embedding, face_jpeg, now).await;
+        db::add_embedding(&pool, pid, embedding, face_jpeg, now).await;
         person.ref_embeddings.push(CachedEmbedding {
             db_id: 0,
             vector: embedding.to_vec(),
@@ -350,16 +364,20 @@ impl FaceTracker {
 
         if person.ref_embeddings.len() > MAX_EMBEDDINGS_PER_PERSON {
             person.ref_embeddings.remove(0);
-            db::trim_embeddings(&self.pool, pid).await;
+            db::trim_embeddings(&pool, pid).await;
         }
     }
 
     pub async fn close_stale_visits(&mut self) {
         let now = now_secs();
+        let pool = match self.pool.clone() {
+            Some(p) => p,
+            None => return,
+        };
         for person in &mut self.people {
             if let Some(vid) = person.open_visit_id {
                 if now - person.last_seen > STALE_SECS {
-                    db::update_visit_end(&self.pool, vid, person.last_seen).await;
+                    db::update_visit_end(&pool, vid, person.last_seen).await;
                     person.open_visit_id = None;
                 }
             }
