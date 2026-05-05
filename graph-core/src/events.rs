@@ -1,6 +1,8 @@
+#[cfg(feature = "bevy")]
 use bevy::prelude::*;
 
-#[derive(Event, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Event))]
+#[derive(Debug, Clone)]
 pub struct NewContent {
     pub source: String,
     pub raw_text: String,
@@ -8,15 +10,18 @@ pub struct NewContent {
     pub outgoing_links: Vec<String>,
 }
 
-#[derive(Event, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Event))]
+#[derive(Debug, Clone)]
 pub struct GraphUpdate {
     pub graph: petgraph::stable_graph::StableGraph<crate::NodeData, crate::EdgeData>,
 }
 
-#[derive(Event, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Event))]
+#[derive(Debug, Clone)]
 pub struct GraphChanged;
 
-#[derive(Event, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Event))]
+#[derive(Debug, Clone)]
 pub struct CameraCommand {
     pub kind: CameraCommandKind,
 }
@@ -29,7 +34,8 @@ pub enum CameraCommandKind {
     Reset,
 }
 
-#[derive(Event, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Event))]
+#[derive(Debug, Clone)]
 pub struct GraphQuery {
     pub query: String,
 }

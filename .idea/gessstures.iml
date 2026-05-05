@@ -8,6 +8,9 @@
       <sourceFolder url="file://$MODULE_DIR$/graph-core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/input-sources/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/hand-tracking-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/engine/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/physics-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/ws-bridge/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

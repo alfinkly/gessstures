@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use graph_core::{GraphResource, GraphChanged, NodeIndex};
-use petgraph::visit::EdgeRef;
+use petgraph::visit::{EdgeRef, IntoEdgeReferences};
+use physics_core::{PhysicsConfig, Vec3 as PVec3, tick_physics};
 
 pub struct ForceLayoutPlugin;
 
@@ -10,19 +11,18 @@ impl Plugin for ForceLayoutPlugin {
     }
 }
 
-const REPULSION_STRENGTH: f32 = 2.0;
-const SPRING_STRENGTH: f32 = 0.3;
-const SPRING_REST: f32 = 8.0;
-const CENTER_STRENGTH: f32 = 0.03;
-const DAMPING: f32 = 0.97;
-const MAX_SPEED: f32 = 0.12;
-const MIN_DIST: f32 = 0.5;
-const BOUNDARY: f32 = 30.0;
+fn to_pvec3(v: Vec3) -> PVec3 {
+    PVec3::new(v.x, v.y, v.z)
+}
+
+fn from_pvec3(v: PVec3) -> Vec3 {
+    Vec3::new(v.x, v.y, v.z)
+}
 
 fn force_layout(
     mut query: Query<(&mut Transform, &crate::renderer::GraphNode)>,
     graph: Res<GraphResource>,
-    mut velocities: Local<Vec<Vec3>>,
+    mut velocities: Local<Vec<PVec3>>,
     mut frame: Local<u64>,
     mut graph_changed: EventWriter<GraphChanged>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -35,16 +35,15 @@ fn force_layout(
         return;
     }
 
-    let mut positions: Vec<(NodeIndex, Vec3)> = Vec::with_capacity(node_count);
-    for (t, gn) in &query {
-        positions.push((gn.0, t.translation));
-    }
+    let positions: Vec<(NodeIndex, Vec3)> = query
+        .iter()
+        .map(|(t, gn)| (gn.0, t.translation))
+        .collect();
 
     if velocities.len() != node_count {
-        *velocities = vec![Vec3::ZERO; node_count];
+        *velocities = vec![PVec3::ZERO; node_count];
     }
 
-    // Status log every 120 frames (~2 sec)
     if *frame % 120 == 0 {
         let centroid: Vec3 = positions.iter().map(|(_, p)| *p).sum::<Vec3>() / node_count as f32;
         info!(
@@ -57,62 +56,33 @@ fn force_layout(
         );
     }
 
-    // P = pause physics
-    if keys.pressed(KeyCode::KeyP) {
-        return;
-    }
+    let paused = keys.pressed(KeyCode::KeyP);
 
-    for i in 0..positions.len() {
-        let (ni, pos_i) = positions[i];
+    let p_positions: Vec<PVec3> = positions.iter().map(|(_, p)| to_pvec3(*p)).collect();
+    let edges: Vec<(usize, usize)> = graph
+        .graph
+        .edge_references()
+        .filter_map(|e| {
+            let from = positions.iter().position(|(n, _)| *n == e.source())?;
+            let to = positions.iter().position(|(n, _)| *n == e.target())?;
+            Some((from, to))
+        })
+        .collect();
 
-        // Centering
-        let dist_center = pos_i.length();
-        if dist_center > 0.01 {
-            velocities[i] += -pos_i.normalize() * dist_center * CENTER_STRENGTH;
-        }
+    let config = PhysicsConfig::default();
+    let (new_positions, new_velocities) = tick_physics(
+        &p_positions,
+        &edges,
+        &velocities,
+        &config,
+        paused,
+    );
 
-        // Hard boundary bounce
-        if dist_center > BOUNDARY {
-            velocities[i] += -pos_i.normalize() * (dist_center - BOUNDARY) * 1.5;
-        }
+    *velocities = new_velocities;
 
-        // Repulsion from all others
-        for j in 0..positions.len() {
-            if i == j {
-                continue;
-            }
-            let (_, pos_j) = positions[j];
-            let dir = pos_i - pos_j;
-            let dist = dir.length().max(MIN_DIST);
-            velocities[i] += dir.normalize_or_zero() * REPULSION_STRENGTH / (dist * dist);
-        }
-
-        // Spring attraction along edges
-        for edge in graph.graph.edges(ni) {
-            let target = edge.target();
-            if let Some(j) = positions.iter().position(|(n, _)| *n == target) {
-                let (_, pos_j) = positions[j];
-                let dir = pos_j - pos_i;
-                let dist = dir.length().max(MIN_DIST);
-                let force = SPRING_STRENGTH * (dist - SPRING_REST);
-                velocities[i] += dir.normalize_or_zero() * force;
-            }
-        }
-    }
-
-    // Damping + clamp
-    for v in velocities.iter_mut() {
-        *v *= DAMPING;
-        let s = v.length();
-        if s > MAX_SPEED {
-            *v = v.normalize() * MAX_SPEED;
-        }
-    }
-
-    // Apply
     for (mut transform, graph_node) in &mut query {
         if let Some(i) = positions.iter().position(|(n, _)| *n == graph_node.0) {
-            transform.translation += velocities[i];
+            transform.translation = from_pvec3(new_positions[i]);
         }
     }
 

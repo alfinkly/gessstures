@@ -4,7 +4,7 @@ members = [
     "ai-pipeline",
     "data-sources",
     "input-sources",
-    "app", "hand-tracking-core",
+    "app", "hand-tracking-core", "physics-core", "engine", "ws-bridge",
 ]
 resolver = "3"
 

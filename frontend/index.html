@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gessstures — 3D Knowledge Graph</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <canvas id="canvas"></canvas>
+    <div id="status">
+      <span id="node-count">0 nodes</span>
+      <span id="fps">0 fps</span>
+      <span id="ws-status" class="disconnected">● disconnected</span>
+    </div>
+    <div id="controls-hint">
+      Drag: orbit &bull; Scroll: zoom &bull; Right-drag: pan &bull;
+      <a href="body-detect.html" style="color:#6366f1;text-decoration:none;">Body Detect Test</a>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

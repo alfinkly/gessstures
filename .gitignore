@@ -23,3 +23,8 @@ target
 # TFLite/MediaPipe model binaries — download via scripts/download_models.sh
 models/*.tflite
 models/*.task
+
+# Next.js / frontend
+frontend/.next/
+frontend/node_modules/
+frontend/out/

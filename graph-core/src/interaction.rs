@@ -1,3 +1,4 @@
+#[cfg(feature = "bevy")]
 use bevy::prelude::*;
 use petgraph::stable_graph::NodeIndex;
 
@@ -9,7 +10,8 @@ pub enum GraphInteractionMode {
     VertexContent,
 }
 
-#[derive(Resource, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Resource))]
+#[derive(Debug, Clone)]
 pub struct InteractionState {
     pub mode: GraphInteractionMode,
     pub pinned_node: Option<NodeIndex>,

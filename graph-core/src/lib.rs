@@ -9,4 +9,4 @@ pub use graph::*;
 pub use interaction::*;
 
 pub use petgraph::stable_graph::NodeIndex;
-pub use petgraph::visit::EdgeRef;
+pub use petgraph::visit::{EdgeRef, IntoEdgeReferences};

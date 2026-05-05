@@ -4,11 +4,12 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-graph_core = { path = "../graph-core" }
+graph_core = { path = "../graph-core", features = ["bevy"] }
 ai_pipeline = { path = "../ai-pipeline" }
 data_sources = { path = "../data-sources" }
 input_sources = { path = "../input-sources" }
 hand-tracking-core = { path = "../hand-tracking-core", features = ["bevy"] }
+physics_core = { path = "../physics-core" }
 bevy = "0.15"
 clap = { version = "4", features = ["derive"] }
 walkdir = "2"

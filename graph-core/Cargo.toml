@@ -5,5 +5,8 @@ edition.workspace = true
 
 [dependencies]
 petgraph = "0.7"
-bevy = "0.15"
+bevy = { version = "0.15", optional = true }
 serde = { version = "1", features = ["derive"] }
+
+[features]
+bevy = ["dep:bevy"]

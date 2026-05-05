@@ -1,0 +1,6 @@
+[package]
+name = "physics_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

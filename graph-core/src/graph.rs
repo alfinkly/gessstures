@@ -1,8 +1,10 @@
+#[cfg(feature = "bevy")]
 use bevy::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use crate::{NodeData, EdgeData};
 
-#[derive(Resource, Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(Resource))]
+#[derive(Debug, Clone)]
 pub struct GraphResource {
     pub graph: StableGraph<NodeData, EdgeData>,
 }
