@@ -130,16 +130,14 @@ pub async fn start(port: u16, engine: Arc<Mutex<Engine>>, tracker: Arc<Mutex<fac
         }
     });
 
-    // people list broadcast (every 1 sec)
     let tr = tracker.clone();
     let ptx = people_tx.clone();
     tokio::spawn(async move {
         let mut int = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             int.tick().await;
-            let mut t = tr.lock().await;
+            let t = tr.lock().await;
             let now_s = face_tracker::now_secs();
-            t.close_all_visits(now_s);
             let people: Vec<PersonView> = t
                 .all_people()
                 .iter()
@@ -149,7 +147,7 @@ pub async fn start(port: u16, engine: Arc<Mutex<Engine>>, tracker: Arc<Mutex<fac
                         id: p.id,
                         first_seen: p.first_seen,
                         last_seen: p.last_seen,
-                        total_seen_secs: p.total_seen_secs,
+                        total_seen_secs: p.total_seen,
                         visit_count: p.visits.len(),
                         face_jpeg_b64: if p.best_face_jpeg.is_empty() { String::new() } else { base64::engine::general_purpose::STANDARD.encode(&p.best_face_jpeg) },
                         visits: p.visits.iter().map(|v| VisitView { start: v.start, end: v.end, camera_id: v.camera_id.clone() }).collect(),
@@ -180,7 +178,7 @@ pub async fn start(port: u16, engine: Arc<Mutex<Engine>>, tracker: Arc<Mutex<fac
 
 #[derive(Serialize)]
 struct PersonView {
-    id: usize,
+    id: i32,
     first_seen: f64,
     last_seen: f64,
     total_seen_secs: f64,
@@ -261,7 +259,7 @@ async fn handle_connection(
                                         if !snapshots.is_empty() {
                                             eprintln!("[face_det] ingesting {} faces into tracker", snapshots.len());
                                             let mut t = tr.lock().await;
-                                            t.ingest(snapshots, now);
+                                            t.ingest(snapshots).await;
                                         }
                                     } else {
                                         eprintln!("[face_det] failed to parse response: {}", r);
