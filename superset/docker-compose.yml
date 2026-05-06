@@ -1,0 +1,75 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  superset:
+    image: apache/superset:latest
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
+    environment:
+      DATABASE_DIALECT: postgresql
+      DATABASE_USER: superset
+      DATABASE_PASSWORD: superset
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      DATABASE_DB: superset
+      SUPERSET_SECRET_KEY: gessstures-superset-key
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_PORT: "8088"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    volumes:
+      - superset_home:/app/superset_home
+
+  superset-init:
+    image: apache/superset:latest
+    command: ["/app/docker/docker-init.sh"]
+    user: "root"
+    environment:
+      DATABASE_DIALECT: postgresql
+      DATABASE_USER: superset
+      DATABASE_PASSWORD: superset
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      DATABASE_DB: superset
+      SUPERSET_SECRET_KEY: gessstures-superset-key
+      SUPERSET_LOAD_EXAMPLES: "no"
+      ADMIN_PASSWORD: admin
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - superset_home:/app/superset_home
+    healthcheck:
+      disable: true
+
+volumes:
+  db_data:
+  redis_data:
+  superset_home:

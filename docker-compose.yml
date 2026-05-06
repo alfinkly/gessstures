@@ -31,20 +31,7 @@ services:
     volumes:
       - ./models:/app/models
 
-  superset:
-    image: apache/superset:latest
-    restart: unless-stopped
-    ports:
-      - "8088:8088"
-    environment:
-      SUPERSET_SECRET_KEY: gessstures-superset-key
-    command: >
-      sh -c "
-        superset db upgrade &&
-        superset fab create-admin --username admin --password admin --firstname Admin --lastname User --email admin@example.com 2>/dev/null || true &&
-        superset init 2>/dev/null || true &&
-        superset run -p 8088 --with-threads
-      "
+
 
 volumes:
   pgdata:
