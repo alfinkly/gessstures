@@ -1,0 +1,13 @@
+target/
+node_modules/
+.next/
+.git/
+__pycache__/
+*.pyc
+.idea/
+demo-notes/
+frontend/
+docs/
+models/*.task
+*.md
+LICENSE
