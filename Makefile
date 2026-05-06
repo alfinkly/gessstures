@@ -7,6 +7,9 @@ serv: db
 	cargo run -p ws_bridge -- -n demo-notes
 
 docker:
+	docker compose build --no-cache && docker compose up
+
+docker-fast:
 	docker compose up --build
 
 front:

@@ -58,9 +58,9 @@ RUN apt-get update && apt-get install -y \
 
 # Python deps for body + face detection
 RUN pip install --no-cache-dir \
-    mediapipe \
-    opencv-python-headless \
     numpy \
+    opencv-python-headless \
+    mediapipe \
     insightface
 
 WORKDIR /app
