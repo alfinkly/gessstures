@@ -1,4 +1,4 @@
-.PHONY: serv front docker db
+.PHONY: serv front docker docker-nocache docker-fast db
 
 db:
 	docker compose up -d postgres
