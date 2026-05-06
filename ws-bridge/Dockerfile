@@ -50,10 +50,10 @@ RUN cargo build --release -p ws_bridge && cp target/release/ws-bridge /ws-bridge
 # ── Stage 2: Runtime ──────────────────────────────────────────
 FROM python:3.12-slim
 
-# System deps (install BEFORE Python deps for layer caching)
+# System deps (before Python deps for layer caching)
 RUN apt-get update && apt-get install -y \
     g++ build-essential \
-    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps for body + face detection
