@@ -19,10 +19,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
 
   ws-bridge:
     build:
@@ -31,11 +27,7 @@ services:
     ports:
       - "3030:3030"
     environment:
-      DATABASE_URL: postgres://gessstures:gessstures@postgres:5432/gessstures
       RUST_BACKTRACE: 1
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
       - ./models:/app/models
 
@@ -45,23 +37,14 @@ services:
     ports:
       - "8088:8088"
     environment:
-      SUPERSET_SECRET_KEY: gessstures-superset-secret-key
-      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
-    volumes:
-      - superset_data:/app/superset_home
-      - ./scripts/superset-init.sh:/app/superset-init.sh
-    depends_on:
-      - redis
-    entrypoint: []
-    command:
-      - sh
-      - -c
-      - |
-        chmod +x /app/superset-init.sh &&
-        /app/superset-init.sh &&
-        superset run -p 8088 --with-threads --reload --debugger
+      SUPERSET_SECRET_KEY: gessstures-superset-key
+    command: >
+      sh -c "
+        superset db upgrade &&
+        superset fab create-admin --username admin --password admin --firstname Admin --lastname User --email admin@example.com 2>/dev/null || true &&
+        superset init 2>/dev/null || true &&
+        superset run -p 8088 --with-threads
+      "
 
 volumes:
   pgdata:
-  redis_data:
-  superset_data:

@@ -80,5 +80,10 @@ async fn main() {
         }
     });
 
+    println!("[main] starting server on port {}", cli.port);
+    use std::io::Write;
+    std::io::stdout().flush().ok();
+    std::io::stderr().flush().ok();
     server::start(cli.port, engine, tracker).await;
+    eprintln!("[main] server exited unexpectedly");
 }

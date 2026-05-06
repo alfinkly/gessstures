@@ -1,16 +1,13 @@
-.PHONY: serv front docker docker-nocache docker-fast db
+.PHONY: serv front docker
 
-db:
-	docker compose up -d postgres
-
-serv: db
+serv:
 	cargo run -p ws_bridge -- -n demo-notes
 
 docker:
-	docker compose build --no-cache && docker compose up
+	docker compose up --build -d
 
-docker-fast:
-	docker compose up --build
+down:
+	docker compose down
 
 front:
 	cd frontend && rm -rf .next && npm run dev
