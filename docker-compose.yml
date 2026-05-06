@@ -16,6 +16,14 @@ services:
       timeout: 3s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   ws-bridge:
     build:
       context: .
@@ -31,5 +39,28 @@ services:
     volumes:
       - ./models:/app/models
 
+  superset:
+    image: apache/superset:latest
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: gessstures-superset-secret-key
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    volumes:
+      - superset_data:/app/superset_home
+      - ./scripts/superset-init.sh:/app/superset-init.sh
+    depends_on:
+      - redis
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - |
+        /app/superset-init.sh &&
+        superset run -p 8088 --with-threads --reload --debugger
+
 volumes:
   pgdata:
+  redis_data:
+  superset_data:
