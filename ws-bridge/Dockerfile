@@ -27,8 +27,9 @@ RUN pip install --no-cache-dir \
     numpy \
     insightface
 
-# System deps for MediaPipe + OpenCV
+# System deps for insightface (Cython), MediaPipe, OpenCV
 RUN apt-get update && apt-get install -y \
+    g++ build-essential \
     libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
