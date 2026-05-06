@@ -19,7 +19,7 @@ struct Cli {
     #[arg(short, long, default_value = "3030")]
     port: u16,
 
-    #[arg(long)]
+    #[arg(long, env = "DATABASE_URL")]
     database_url: Option<String>,
 }
 
