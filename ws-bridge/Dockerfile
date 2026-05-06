@@ -19,8 +19,18 @@ RUN apt-get update && apt-get install -y \
     libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    numpy opencv-python-headless mediapipe insightface
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install numpy opencv-python-headless mediapipe insightface
+
+# Pre-cache insightface models so they don't download at runtime
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/root/.insightface \
+    python3 -c "
+from insightface.app import FaceAnalysis
+app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+app.prepare(ctx_id=-1)
+print('insightface models cached')
+" 2>/dev/null || true
 
 WORKDIR /app
 
