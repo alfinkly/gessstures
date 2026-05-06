@@ -30,8 +30,8 @@ services:
       RUST_BACKTRACE: 1
     volumes:
       - ./models:/app/models
-
-
+      - insightface_models:/root/.insightface
 
 volumes:
   pgdata:
+  insightface_models:
