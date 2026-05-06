@@ -33,7 +33,7 @@ RUN cargo build --release -p ws_bridge 2>/dev/null || true
 RUN rm -rf graph-core/src ai-pipeline/src data-sources/src input-sources/src \
          engine/src physics-core/src app/src hand-tracking-core/src ws-bridge/src
 
-# 5. Copy actual source
+# 5. Copy actual source (including migrations used by include_str!)
 COPY graph-core/src graph-core/src
 COPY ai-pipeline/src ai-pipeline/src
 COPY data-sources/src data-sources/src
@@ -43,6 +43,7 @@ COPY physics-core/src physics-core/src
 COPY app/src app/src
 COPY hand-tracking-core/src hand-tracking-core/src
 COPY ws-bridge/src ws-bridge/src
+COPY ws-bridge/migrations ws-bridge/migrations
 
 # 6. Final build (only recompiles crates that changed)
 RUN cargo build --release -p ws_bridge && cp target/release/ws-bridge /ws-bridge
